@@ -250,11 +250,16 @@ def render_blender_video(
     output_path: Path,
     fps: float = 25.0,
     frame_size: int = 512,
+    smplx_model_path: Optional[str] = None,
 ) -> None:
     """Render SMPL-X sequence using Blender Cycles via subprocess.
 
-    Requires Blender ≥ 3.6 installed and accessible as `blender` in PATH.
-    Uses the official SMPL-X Blender add-on for mesh driving.
+    Requires Blender >= 3.6 installed and accessible as `blender` in PATH.
+    Drives the SMPL-X mesh via shape keys for per-frame vertex animation.
+
+    Lighting: three-point rig (key/fill/rim) + HDRI environment.
+    Material: Principled BSDF with subsurface scattering for realistic skin.
+    Renderer: Cycles with 128 samples + OpenImageDenoise.
     """
     import subprocess
     import tempfile
@@ -264,21 +269,23 @@ def render_blender_video(
     data = np.load(smplx_params_path, allow_pickle=False)
     params_dict = {k: data[k].tolist() for k in data.files}
 
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False,
+                                     encoding="utf-8") as f:
         json.dump(params_dict, f)
         params_json = f.name
 
     blender_script = Path(__file__).parent / "blender_render_smplx.py"
     if not blender_script.exists():
         raise FileNotFoundError(
-            f"Blender render script not found: {blender_script}\n"
-            "Create scripts/blender_render_smplx.py with the Blender bpy pipeline."
+            f"Blender render script not found: {blender_script}"
         )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    smplx_path = smplx_model_path or "data/smplx_models"
     cmd = [
         "blender", "--background", "--python", str(blender_script),
         "--", str(params_json), str(output_path), str(fps), str(frame_size),
+        str(smplx_path),
     ]
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:

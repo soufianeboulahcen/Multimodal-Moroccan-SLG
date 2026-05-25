@@ -33,7 +33,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 
 from mosl.data.dataset import MoSLSkelsDataset, mosl_collate
-from mosl.model.mdm_denoiser import MDMConfig, MDMDenoiser
+from mosl.model.mdm_denoiser import MDMConfig, MDMDenoiser, _HAS_SDPA
 from mosl.model.signllm import SignLLMConfig
 from mosl.text.tokenizer import WordTokenizer
 from mosl.train.noise_schedule import NoiseSchedule, savgol_smooth
@@ -62,6 +62,10 @@ class DiffusionTrainConfig:
     n_sample_steps: int = 50        # DDIM steps at eval time
     noise_schedule: str = "cosine"
 
+    # Classifier-free guidance
+    cfg_dropout: float = 0.1        # fraction of training steps with null text conditioning
+    cfg_scale: float = 2.5          # guidance scale at inference
+
     # Logging
     log_every_steps: int = 50
     eval_every_epochs: int = 5      # run DDIM generation on dev subset
@@ -70,6 +74,7 @@ class DiffusionTrainConfig:
     device: str = "cuda"
     bf16: bool = True               # use bfloat16 on Ampere/Blackwell
     grad_checkpoint: bool = False   # gradient checkpointing (saves ~40% VRAM)
+    use_flash: bool = True          # Flash Attention via SDPA
 
     # Checkpoints
     signllm_checkpoint: Optional[str] = None   # path to SignLLM best.pt
@@ -144,6 +149,12 @@ def train_diffusion(
     # -----------------------------------------------------------------------
     # Model + noise schedule
     # -----------------------------------------------------------------------
+    # Propagate hardware flags into model config
+    mdm_cfg.grad_checkpoint = train_cfg.grad_checkpoint
+    mdm_cfg.use_flash = train_cfg.use_flash
+    mdm_cfg.cfg_dropout = train_cfg.cfg_dropout
+    mdm_cfg.cfg_scale = train_cfg.cfg_scale
+
     model = MDMDenoiser(mdm_cfg, signllm_cfg).to(device)
 
     if train_cfg.signllm_checkpoint:
@@ -153,11 +164,10 @@ def train_diffusion(
         model.freeze_text_encoder()
         print("SignLLM text encoder frozen (random weights — load a checkpoint for best results)")
 
-    if train_cfg.grad_checkpoint:
-        # Wrap each AdaLNBlock with gradient checkpointing
-        from torch.utils.checkpoint import checkpoint_sequential
-        # Applied per-layer in the forward pass via a wrapper
-        model._use_grad_checkpoint = True
+    flash_status = "enabled" if (train_cfg.use_flash and _HAS_SDPA) else "disabled"
+    print(f"Flash Attention: {flash_status}")
+    print(f"Gradient checkpointing: {'enabled' if train_cfg.grad_checkpoint else 'disabled'}")
+    print(f"CFG dropout: {train_cfg.cfg_dropout}  CFG scale: {train_cfg.cfg_scale}")
 
     schedule = NoiseSchedule(
         n_steps=train_cfg.n_diffusion_steps,
@@ -214,10 +224,16 @@ def train_diffusion(
             # Forward diffusion: add noise
             x_t, _ = schedule.q_sample(x0, t_int)
 
+            # Classifier-free guidance: randomly drop text conditioning
+            drop_text = None
+            if train_cfg.cfg_dropout > 0:
+                drop_text = torch.rand(B, device=device) < train_cfg.cfg_dropout
+
             # Denoiser forward
             with torch.amp.autocast("cuda", dtype=amp_dtype,
                                     enabled=(train_cfg.bf16 and device.type == "cuda")):
-                x0_pred = model(x_t, t_int, text_ids, text_mask, pose_mask=pose_mask)
+                x0_pred = model(x_t, t_int, text_ids, text_mask,
+                                pose_mask=pose_mask, drop_text=drop_text)
                 losses = diffusion_step_loss(x0_pred, x0, pose_mask, loss_cfg)
                 loss = losses["loss"]
 
@@ -342,7 +358,14 @@ if __name__ == "__main__":
     parser.add_argument("--max-epochs", type=int, default=300)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--no-bf16", action="store_true")
-    parser.add_argument("--grad-checkpoint", action="store_true")
+    parser.add_argument("--grad-checkpoint", action="store_true",
+                        help="Enable gradient checkpointing (~40%% VRAM savings)")
+    parser.add_argument("--no-flash", action="store_true",
+                        help="Disable Flash Attention (use standard MHA)")
+    parser.add_argument("--cfg-dropout", type=float, default=0.1,
+                        help="Classifier-free guidance dropout rate (default: 0.1)")
+    parser.add_argument("--cfg-scale", type=float, default=2.5,
+                        help="CFG guidance scale at inference (default: 2.5)")
     parser.add_argument("--resume-from", default=None)
     args = parser.parse_args()
 
@@ -358,6 +381,9 @@ if __name__ == "__main__":
         lr=args.lr,
         bf16=not args.no_bf16,
         grad_checkpoint=args.grad_checkpoint,
+        use_flash=not args.no_flash,
+        cfg_dropout=args.cfg_dropout,
+        cfg_scale=args.cfg_scale,
         resume_from=args.resume_from,
     )
     loss_cfg = DiffusionLossConfig()

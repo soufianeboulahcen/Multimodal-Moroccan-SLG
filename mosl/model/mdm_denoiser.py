@@ -90,23 +90,54 @@ class TimestepEmbedding(nn.Module):
 # AdaLN modulation block
 # ---------------------------------------------------------------------------
 
+def _try_flash_attention() -> bool:
+    """Return True if scaled_dot_product_attention with Flash Attention is available."""
+    try:
+        # PyTorch >= 2.0 has SDPA; Flash Attention backend is auto-selected when available
+        import torch.nn.functional as F
+        _ = F.scaled_dot_product_attention
+        return True
+    except AttributeError:
+        return False
+
+
+_HAS_SDPA = _try_flash_attention()
+
+
 class AdaLNBlock(nn.Module):
     """Single transformer layer with AdaLN conditioning.
 
     Applies adaptive layer norm modulation from a conditioning vector
     (timestep + optional signer style) before each sub-layer, following
     DiT (Peebles & Xie 2023) and MDM (Tevet et al. 2022).
+
+    Uses torch.nn.functional.scaled_dot_product_attention (Flash Attention
+    backend) when available (PyTorch >= 2.0 + CUDA).
     """
 
     def __init__(self, d_model: int, nhead: int, d_ff: int,
-                 dropout: float = 0.1, cond_dim: int = 512) -> None:
+                 dropout: float = 0.1, cond_dim: int = 512,
+                 use_flash: bool = True) -> None:
         super().__init__()
+        self.d_model = d_model
+        self.nhead = nhead
+        self.head_dim = d_model // nhead
+        self.dropout = dropout
+        self.use_flash = use_flash and _HAS_SDPA
+
         self.norm1 = nn.LayerNorm(d_model)
         self.norm2 = nn.LayerNorm(d_model)
         self.norm3 = nn.LayerNorm(d_model)
 
-        self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout, batch_first=True)
-        self.cross_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout, batch_first=True)
+        # Fused QKV projections for self-attention
+        self.self_qkv = nn.Linear(d_model, 3 * d_model, bias=False)
+        self.self_out = nn.Linear(d_model, d_model)
+
+        # Separate Q / KV projections for cross-attention
+        self.cross_q = nn.Linear(d_model, d_model, bias=False)
+        self.cross_kv = nn.Linear(d_model, 2 * d_model, bias=False)
+        self.cross_out = nn.Linear(d_model, d_model)
+
         self.ff = nn.Sequential(
             nn.Linear(d_model, d_ff),
             nn.GELU(),
@@ -124,6 +155,84 @@ class AdaLNBlock(nn.Module):
         nn.init.zeros_(self.adaLN_modulation[-1].weight)
         nn.init.zeros_(self.adaLN_modulation[-1].bias)
 
+    def _self_attn(self, x: torch.Tensor) -> torch.Tensor:
+        B, T, D = x.shape
+        qkv = self.self_qkv(x)                              # (B, T, 3D)
+        q, k, v = qkv.chunk(3, dim=-1)
+
+        if self.use_flash:
+            # Reshape to (B, nhead, T, head_dim) for SDPA
+            q = q.view(B, T, self.nhead, self.head_dim).transpose(1, 2)
+            k = k.view(B, T, self.nhead, self.head_dim).transpose(1, 2)
+            v = v.view(B, T, self.nhead, self.head_dim).transpose(1, 2)
+            drop = self.dropout if self.training else 0.0
+            out = torch.nn.functional.scaled_dot_product_attention(
+                q, k, v, dropout_p=drop, is_causal=False
+            )
+            out = out.transpose(1, 2).contiguous().view(B, T, D)
+        else:
+            # Fallback: standard MHA
+            q = q.view(B, T, self.nhead, self.head_dim).transpose(1, 2)
+            k = k.view(B, T, self.nhead, self.head_dim).transpose(1, 2)
+            v = v.view(B, T, self.nhead, self.head_dim).transpose(1, 2)
+            scale = self.head_dim ** -0.5
+            attn = (q @ k.transpose(-2, -1)) * scale
+            attn = attn.softmax(dim=-1)
+            if self.training and self.dropout > 0:
+                attn = torch.nn.functional.dropout(attn, p=self.dropout)
+            out = (attn @ v).transpose(1, 2).contiguous().view(B, T, D)
+
+        return self.self_out(out)
+
+    def _cross_attn(
+        self,
+        x: torch.Tensor,           # (B, T, D)
+        context: torch.Tensor,     # (B, L, D)
+        context_pad_mask: Optional[torch.Tensor] = None,  # (B, L) True=padding
+    ) -> torch.Tensor:
+        B, T, D = x.shape
+        L = context.shape[1]
+
+        q = self.cross_q(x)                                 # (B, T, D)
+        kv = self.cross_kv(context)                         # (B, L, 2D)
+        k, v = kv.chunk(2, dim=-1)
+
+        if self.use_flash:
+            q = q.view(B, T, self.nhead, self.head_dim).transpose(1, 2)
+            k = k.view(B, L, self.nhead, self.head_dim).transpose(1, 2)
+            v = v.view(B, L, self.nhead, self.head_dim).transpose(1, 2)
+
+            # Build attention bias from padding mask
+            attn_bias = None
+            if context_pad_mask is not None:
+                # (B, 1, 1, L) — large negative for padding positions
+                attn_bias = torch.zeros(B, 1, 1, L, device=x.device, dtype=x.dtype)
+                attn_bias = attn_bias.masked_fill(
+                    context_pad_mask.unsqueeze(1).unsqueeze(2), float("-inf")
+                )
+
+            drop = self.dropout if self.training else 0.0
+            out = torch.nn.functional.scaled_dot_product_attention(
+                q, k, v, attn_mask=attn_bias, dropout_p=drop
+            )
+            out = out.transpose(1, 2).contiguous().view(B, T, D)
+        else:
+            q = q.view(B, T, self.nhead, self.head_dim).transpose(1, 2)
+            k = k.view(B, L, self.nhead, self.head_dim).transpose(1, 2)
+            v = v.view(B, L, self.nhead, self.head_dim).transpose(1, 2)
+            scale = self.head_dim ** -0.5
+            attn = (q @ k.transpose(-2, -1)) * scale
+            if context_pad_mask is not None:
+                attn = attn.masked_fill(
+                    context_pad_mask.unsqueeze(1).unsqueeze(2), float("-inf")
+                )
+            attn = attn.softmax(dim=-1)
+            if self.training and self.dropout > 0:
+                attn = torch.nn.functional.dropout(attn, p=self.dropout)
+            out = (attn @ v).transpose(1, 2).contiguous().view(B, T, D)
+
+        return self.cross_out(out)
+
     def forward(
         self,
         x: torch.Tensor,                        # (B, T, d_model)
@@ -140,15 +249,11 @@ class AdaLNBlock(nn.Module):
 
         # Self-attention with AdaLN
         h = (1 + s1) * self.norm1(x) + b1
-        attn_out, _ = self.self_attn(h, h, h)
-        x = x + attn_out
+        x = x + self._self_attn(h)
 
         # Cross-attention over text with AdaLN
         h = (1 + s2) * self.norm2(x) + b2
-        mem_mask = ~context_key_padding_mask if context_key_padding_mask is not None else None
-        cross_out, _ = self.cross_attn(h, context, context,
-                                        key_padding_mask=context_key_padding_mask)
-        x = x + cross_out
+        x = x + self._cross_attn(h, context, context_key_padding_mask)
 
         # Feed-forward with AdaLN
         h = (1 + s3) * self.norm3(x) + b3
@@ -183,9 +288,19 @@ class MDMConfig:
     text_d_model: int = 768                   # must match SignLLMConfig.d_model
     use_signer_style: bool = False            # enable once signer_id is annotated
 
+    # Classifier-free guidance
+    cfg_dropout: float = 0.1                  # probability of dropping text conditioning during training
+    cfg_scale: float = 2.5                    # guidance scale at inference (1.0 = no guidance)
+
     # Diffusion
     n_diffusion_steps: int = 1000
     hand_loss_weight: float = 3.0            # upweight hand coords in all losses
+
+    # Flash Attention
+    use_flash: bool = True                    # use SDPA / Flash Attention when available
+
+    # Gradient checkpointing
+    grad_checkpoint: bool = False             # trade compute for VRAM (~40% savings)
 
     # SignLLM text encoder checkpoint (frozen)
     signllm_checkpoint: Optional[str] = None  # path to best.pt from SignLLM training
@@ -215,6 +330,10 @@ class MDMDenoiser(nn.Module):
         # Project text features from SignLLM d_model (768) to denoiser d_model
         self.text_proj = nn.Linear(config.text_d_model, d)
 
+        # --- Null text embedding for classifier-free guidance --------------
+        # Learned unconditional embedding (replaces text context when dropped)
+        self.null_text_embed = nn.Parameter(torch.zeros(1, 1, d))
+
         # --- Timestep embedding --------------------------------------------
         self.time_embed = TimestepEmbedding(config.cond_dim)
 
@@ -225,7 +344,10 @@ class MDMDenoiser(nn.Module):
 
         # --- Denoiser transformer layers -----------------------------------
         self.layers = nn.ModuleList([
-            AdaLNBlock(d, config.nhead, config.d_ff, config.dropout, config.cond_dim)
+            AdaLNBlock(
+                d, config.nhead, config.d_ff, config.dropout,
+                config.cond_dim, use_flash=config.use_flash,
+            )
             for _ in range(config.n_layers)
         ])
         self.final_norm = nn.LayerNorm(d)
@@ -283,14 +405,31 @@ class MDMDenoiser(nn.Module):
         text_mask: torch.Tensor,               # (B, L) True=real token
         style_emb: Optional[torch.Tensor] = None,  # (B, cond_dim) signer style
         pose_mask: Optional[torch.Tensor] = None,  # (B, T) True=real frame
+        drop_text: Optional[torch.Tensor] = None,  # (B,) bool — True=use null embed (CFG training)
     ) -> torch.Tensor:
         """Predict clean pose x0 from noisy pose x_t.
 
         Returns (B, T, 150) — the predicted clean pose sequence.
+
+        drop_text: per-sample mask for classifier-free guidance training.
+          When True for a sample, the null text embedding is used instead of
+          the actual text features. At inference, run twice (conditional +
+          unconditional) and interpolate with cfg_scale.
         """
+        B = x_noisy.shape[0]
+
         # Text conditioning
         text_ctx = self.encode_text(text_ids, text_mask)   # (B, L, d)
         text_pad_mask = ~text_mask                          # True=padding (PyTorch convention)
+
+        # Classifier-free guidance: replace text context with null embed for dropped samples
+        if drop_text is not None and drop_text.any():
+            null = self.null_text_embed.expand(B, text_ctx.shape[1], -1)  # (B, L, d)
+            drop_mask = drop_text.view(B, 1, 1).to(text_ctx.dtype)
+            text_ctx = text_ctx * (1 - drop_mask) + null * drop_mask
+            # Null embed has no padding — clear the pad mask for dropped samples
+            if text_pad_mask is not None:
+                text_pad_mask = text_pad_mask & ~drop_text.unsqueeze(1)
 
         # Timestep conditioning
         cond = self.time_embed(t)                           # (B, cond_dim)
@@ -301,13 +440,53 @@ class MDMDenoiser(nn.Module):
         x = self.pose_proj_in(x_noisy)                     # (B, T, d)
         x = self.pose_pos(x)
 
-        # Denoiser transformer
-        for layer in self.layers:
-            x = layer(x, text_ctx, cond, context_key_padding_mask=text_pad_mask)
+        # Denoiser transformer (with optional gradient checkpointing)
+        if self.config.grad_checkpoint and self.training:
+            from torch.utils.checkpoint import checkpoint
+            for layer in self.layers:
+                x = checkpoint(
+                    layer, x, text_ctx, cond, text_pad_mask,
+                    use_reentrant=False,
+                )
+        else:
+            for layer in self.layers:
+                x = layer(x, text_ctx, cond, context_key_padding_mask=text_pad_mask)
 
         x = self.final_norm(x)
         x0_pred = self.pose_head(x)                        # (B, T, 150)
         return x0_pred
+
+    @torch.no_grad()
+    def forward_cfg(
+        self,
+        x_noisy: torch.Tensor,
+        t: torch.Tensor,
+        text_ids: torch.Tensor,
+        text_mask: torch.Tensor,
+        cfg_scale: float = 2.5,
+        style_emb: Optional[torch.Tensor] = None,
+        pose_mask: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """Classifier-free guidance inference: conditional + unconditional forward.
+
+        x0_cfg = x0_uncond + cfg_scale * (x0_cond - x0_uncond)
+
+        cfg_scale=1.0 is equivalent to standard conditional generation.
+        cfg_scale>1.0 amplifies the text conditioning signal.
+        """
+        B = x_noisy.shape[0]
+
+        # Conditional prediction
+        x0_cond = self.forward(x_noisy, t, text_ids, text_mask,
+                               style_emb=style_emb, pose_mask=pose_mask)
+
+        # Unconditional prediction (null text)
+        drop_all = torch.ones(B, dtype=torch.bool, device=x_noisy.device)
+        x0_uncond = self.forward(x_noisy, t, text_ids, text_mask,
+                                 style_emb=style_emb, pose_mask=pose_mask,
+                                 drop_text=drop_all)
+
+        return x0_uncond + cfg_scale * (x0_cond - x0_uncond)
 
     def diffusion_loss(
         self,
