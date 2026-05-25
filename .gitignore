@@ -1,0 +1,84 @@
+# ----------------------------------------------------------------------------
+# Raw + extracted dataset (large; reproducible from the public source).
+# ----------------------------------------------------------------------------
+vedios-dataset.zip
+data/raw/
+# Exclude contents of data/processed (use /* so exceptions below work).
+data/processed/*
+# Exception: keep the trained tokenizer vocabulary — small (44 KB), needed
+# at inference time, deterministic but cheap to re-generate.
+!data/processed/vocab.json
+# Exception: keep the OpenPose 2D keypoints NPZ (small, needed for training/eval).
+!data/processed/keypoints_2d/
+!data/processed/keypoints_2d/**
+# Per-frame OpenPose JSON is large (~871 MB, 222k files) — excluded from Git.
+data/processed/openpose_json/
+
+# ----------------------------------------------------------------------------
+# Upstream third-party code is not redistributed (cloned by setup script).
+# Our patches live under patches/ and are applied by scripts/setup_third_party.sh.
+# ----------------------------------------------------------------------------
+third_party/
+
+# ----------------------------------------------------------------------------
+# Training runs, predictions, and outputs are reproducible artefacts; excluded.
+# ----------------------------------------------------------------------------
+runs/
+predictions/
+outputs/
+
+# ----------------------------------------------------------------------------
+# Reference PDFs that are publicly fetchable (arXiv / Mendeley).
+# refs.bib carries the citations.
+# ----------------------------------------------------------------------------
+docs/papers/
+
+# ----------------------------------------------------------------------------
+# Python
+# ----------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.venv-local/
+venv/
+env/
+.python-version
+
+# ----------------------------------------------------------------------------
+# Notebooks
+# ----------------------------------------------------------------------------
+.ipynb_checkpoints/
+
+# ----------------------------------------------------------------------------
+# Models / checkpoints (re-trainable; large)
+# ----------------------------------------------------------------------------
+models/
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+
+# ----------------------------------------------------------------------------
+# The LaTeX thesis report and integration artefacts are kept locally; not
+# redistributed via GitHub.
+# ----------------------------------------------------------------------------
+report/
+SMI_report_final/
+SMI_report_final.zip
+docs/THESIS_INTEGRATION_STRATEGY.md
+
+# ----------------------------------------------------------------------------
+# OS / editor
+# ----------------------------------------------------------------------------
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# ----------------------------------------------------------------------------
+# Logs / experiment trackers
+# ----------------------------------------------------------------------------
+*.log
+wandb/
+lightning_logs/
