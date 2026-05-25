@@ -289,6 +289,125 @@ def count_parameters(model: nn.Module) -> int:
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 
+# ---------------------------------------------------------------------------
+# Standalone text encoder — used by MDMDenoiser without the full SignLLM
+# ---------------------------------------------------------------------------
+
+class SignLLMTextEncoder(nn.Module):
+    """The text encoder half of SignLLM, exposed as a standalone module.
+
+    Identical weights and forward pass to SignLLM.encode_text.  Used by
+    MDMDenoiser so it can load only the encoder portion of a SignLLM
+    checkpoint without instantiating the full decoder.
+
+    Loading from a full SignLLM checkpoint:
+        encoder = SignLLMTextEncoder(cfg)
+        encoder.load_from_signllm_checkpoint("runs/best.pt")
+        encoder.freeze()
+    """
+
+    def __init__(self, config: SignLLMConfig) -> None:
+        super().__init__()
+        d = config.d_model
+        self.config = config
+
+        self.text_embed = nn.Embedding(config.vocab_size, d, padding_idx=config.pad_id)
+        self.text_pos = SinusoidalPositionalEncoding(d, max_len=config.max_text_len)
+
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=d,
+            nhead=config.nhead,
+            dim_feedforward=config.d_ff,
+            dropout=config.dropout,
+            activation="relu",
+            batch_first=True,
+            norm_first=False,
+        )
+        self.text_encoder = nn.TransformerEncoder(encoder_layer, num_layers=config.n_enc_layers)
+
+        self.length_head = nn.Sequential(
+            nn.Linear(d, d),
+            nn.ReLU(),
+            nn.Linear(d, 1),
+        )
+
+        self._init_weights()
+
+    def _init_weights(self) -> None:
+        for module in self.modules():
+            if isinstance(module, nn.Linear):
+                nn.init.normal_(module.weight, std=0.02)
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+            elif isinstance(module, nn.Embedding):
+                nn.init.normal_(module.weight, std=0.02)
+                if module.padding_idx is not None:
+                    with torch.no_grad():
+                        module.weight[module.padding_idx].fill_(0.0)
+
+    def forward(
+        self,
+        text_ids: torch.Tensor,    # (B, L)
+        text_mask: torch.Tensor,   # (B, L) True=real token
+    ) -> torch.Tensor:
+        """Returns text_features (B, L, d_model)."""
+        x = self.text_embed(text_ids) * (self.config.d_model ** 0.5)
+        x = self.text_pos(x)
+        x = self.text_encoder(x, src_key_padding_mask=~text_mask)
+        return x
+
+    def predict_length(
+        self,
+        text_features: torch.Tensor,  # (B, L, d)
+        text_mask: torch.Tensor,      # (B, L)
+    ) -> torch.Tensor:
+        """Mean-pool → MLP → log T prediction. Returns (B,)."""
+        mask_f = text_mask.unsqueeze(-1).to(text_features.dtype)
+        pooled = (text_features * mask_f).sum(dim=1) / mask_f.sum(dim=1).clamp(min=1.0)
+        return self.length_head(pooled).squeeze(-1)
+
+    def load_from_signllm_checkpoint(self, checkpoint_path: str) -> None:
+        """Load text encoder weights from a full SignLLM checkpoint.
+
+        Copies only the keys that belong to the text encoder
+        (text_embed, text_pos, text_encoder, length_head).
+        """
+        ckpt = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
+        full_state = ckpt.get("model_state_dict", ckpt)
+
+        # Extract only the text-encoder keys
+        prefix_map = {
+            "text_embed.": "text_embed.",
+            "text_pos.": "text_pos.",
+            "text_encoder.": "text_encoder.",
+            "length_head.": "length_head.",
+        }
+        encoder_state = {}
+        for k, v in full_state.items():
+            for src_prefix, dst_prefix in prefix_map.items():
+                if k.startswith(src_prefix):
+                    encoder_state[dst_prefix + k[len(src_prefix):]] = v
+                    break
+
+        missing, unexpected = self.load_state_dict(encoder_state, strict=False)
+        if missing:
+            print(f"[SignLLMTextEncoder] missing keys: {missing}")
+        if unexpected:
+            print(f"[SignLLMTextEncoder] unexpected keys: {unexpected}")
+
+    def freeze(self) -> None:
+        """Freeze all parameters (called before diffusion training)."""
+        for p in self.parameters():
+            p.requires_grad = False
+        self.eval()
+
+    def unfreeze(self) -> None:
+        """Unfreeze for joint fine-tuning (optional, later training stages)."""
+        for p in self.parameters():
+            p.requires_grad = True
+        self.train()
+
+
 if __name__ == "__main__":
     # Smoke test: build the locked config, count params, run a forward pass on
     # synthetic data of the right shape.
