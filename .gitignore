@@ -25,7 +25,6 @@ third_party/
 # ----------------------------------------------------------------------------
 runs/
 predictions/
-outputs/
 
 # ----------------------------------------------------------------------------
 # Reference PDFs that are publicly fetchable (arXiv / Mendeley).

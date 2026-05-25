@@ -1,0 +1,16 @@
+{
+  "clip_name": "أَنْتِ_keypoints",
+  "source": "outputs/openpose_json/أَنْتِ_keypoints",
+  "n_frames": 56,
+  "canvas": 768,
+  "fps": 25,
+  "body_format": "coco18",
+  "has_face": true,
+  "hand_points": 21,
+  "interpolated": true,
+  "fit": {
+    "scale": 0.7946917414665222,
+    "offset_x": 197.25701904296875,
+    "offset_y": 37.76983642578125
+  }
+}

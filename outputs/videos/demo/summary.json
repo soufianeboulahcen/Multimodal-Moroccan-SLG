@@ -1,0 +1,97 @@
+[
+  {
+    "video": "/workspaces/codespaces_project_web4jobs/data/vedios-dataset/mosl_videos_dataset_Diverse/دِرْهَمٌ (إِشَارَة 2).mp4",
+    "stem": "دِرْهَمٌ (إِشَارَة 2)",
+    "frames": 55,
+    "fps": 25.0,
+    "resolution": "460x460",
+    "body_det_rate": "100.0%",
+    "outputs": {
+      "overlay": "demo_output/دِرْهَمٌ (إِشَارَة 2)/دِرْهَمٌ (إِشَارَة 2)_overlay.mp4",
+      "skeleton": "demo_output/دِرْهَمٌ (إِشَارَة 2)/دِرْهَمٌ (إِشَارَة 2)_skeleton.mp4",
+      "neon": "demo_output/دِرْهَمٌ (إِشَارَة 2)/دِرْهَمٌ (إِشَارَة 2)_neon.mp4",
+      "heatmap": "demo_output/دِرْهَمٌ (إِشَارَة 2)/دِرْهَمٌ (إِشَارَة 2)_heatmap.mp4",
+      "slowmo": "demo_output/دِرْهَمٌ (إِشَارَة 2)/دِرْهَمٌ (إِشَارَة 2)_slowmo.mp4",
+      "studio": "demo_output/دِرْهَمٌ (إِشَارَة 2)/دِرْهَمٌ (إِشَارَة 2)_studio.mp4",
+      "mosaic": "demo_output/دِرْهَمٌ (إِشَارَة 2)/دِرْهَمٌ (إِشَارَة 2)_mosaic.mp4"
+    },
+    "json_dir": null,
+    "json_files": 0
+  },
+  {
+    "video": "/workspaces/codespaces_project_web4jobs/data/vedios-dataset/mosl_videos_dataset_Letters/ة (إِشَارَة 1).mp4",
+    "stem": "ة (إِشَارَة 1)",
+    "frames": 94,
+    "fps": 25.0,
+    "resolution": "460x460",
+    "body_det_rate": "100.0%",
+    "outputs": {
+      "overlay": "demo_output/ة (إِشَارَة 1)/ة (إِشَارَة 1)_overlay.mp4",
+      "skeleton": "demo_output/ة (إِشَارَة 1)/ة (إِشَارَة 1)_skeleton.mp4",
+      "neon": "demo_output/ة (إِشَارَة 1)/ة (إِشَارَة 1)_neon.mp4",
+      "heatmap": "demo_output/ة (إِشَارَة 1)/ة (إِشَارَة 1)_heatmap.mp4",
+      "slowmo": "demo_output/ة (إِشَارَة 1)/ة (إِشَارَة 1)_slowmo.mp4",
+      "studio": "demo_output/ة (إِشَارَة 1)/ة (إِشَارَة 1)_studio.mp4",
+      "mosaic": "demo_output/ة (إِشَارَة 1)/ة (إِشَارَة 1)_mosaic.mp4"
+    },
+    "json_dir": null,
+    "json_files": 0
+  },
+  {
+    "video": "/workspaces/codespaces_project_web4jobs/data/vedios-dataset/mosl_videos_dataset_Numbers/1.mp4",
+    "stem": "1",
+    "frames": 52,
+    "fps": 25.0,
+    "resolution": "460x460",
+    "body_det_rate": "100.0%",
+    "outputs": {
+      "overlay": "demo_output/1/1_overlay.mp4",
+      "skeleton": "demo_output/1/1_skeleton.mp4",
+      "neon": "demo_output/1/1_neon.mp4",
+      "heatmap": "demo_output/1/1_heatmap.mp4",
+      "slowmo": "demo_output/1/1_slowmo.mp4",
+      "studio": "demo_output/1/1_studio.mp4",
+      "mosaic": "demo_output/1/1_mosaic.mp4"
+    },
+    "json_dir": null,
+    "json_files": 0
+  },
+  {
+    "video": "/workspaces/codespaces_project_web4jobs/data/vedios-dataset/mosl_videos_dataset_Pronouns/أَنْتِ.mp4",
+    "stem": "أَنْتِ",
+    "frames": 56,
+    "fps": 25.0,
+    "resolution": "460x460",
+    "body_det_rate": "100.0%",
+    "outputs": {
+      "overlay": "demo_output/أَنْتِ/أَنْتِ_overlay.mp4",
+      "skeleton": "demo_output/أَنْتِ/أَنْتِ_skeleton.mp4",
+      "neon": "demo_output/أَنْتِ/أَنْتِ_neon.mp4",
+      "heatmap": "demo_output/أَنْتِ/أَنْتِ_heatmap.mp4",
+      "slowmo": "demo_output/أَنْتِ/أَنْتِ_slowmo.mp4",
+      "studio": "demo_output/أَنْتِ/أَنْتِ_studio.mp4",
+      "mosaic": "demo_output/أَنْتِ/أَنْتِ_mosaic.mp4"
+    },
+    "json_dir": null,
+    "json_files": 0
+  },
+  {
+    "video": "/workspaces/codespaces_project_web4jobs/data/vedios-dataset/mosl_videos_dataset_days_months_seasons/السَّبْتُ (إِشَارَة 2).mp4",
+    "stem": "السَّبْتُ (إِشَارَة 2)",
+    "frames": 58,
+    "fps": 25.0,
+    "resolution": "460x460",
+    "body_det_rate": "100.0%",
+    "outputs": {
+      "overlay": "demo_output/السَّبْتُ (إِشَارَة 2)/السَّبْتُ (إِشَارَة 2)_overlay.mp4",
+      "skeleton": "demo_output/السَّبْتُ (إِشَارَة 2)/السَّبْتُ (إِشَارَة 2)_skeleton.mp4",
+      "neon": "demo_output/السَّبْتُ (إِشَارَة 2)/السَّبْتُ (إِشَارَة 2)_neon.mp4",
+      "heatmap": "demo_output/السَّبْتُ (إِشَارَة 2)/السَّبْتُ (إِشَارَة 2)_heatmap.mp4",
+      "slowmo": "demo_output/السَّبْتُ (إِشَارَة 2)/السَّبْتُ (إِشَارَة 2)_slowmo.mp4",
+      "studio": "demo_output/السَّبْتُ (إِشَارَة 2)/السَّبْتُ (إِشَارَة 2)_studio.mp4",
+      "mosaic": "demo_output/السَّبْتُ (إِشَارَة 2)/السَّبْتُ (إِشَارَة 2)_mosaic.mp4"
+    },
+    "json_dir": null,
+    "json_files": 0
+  }
+]
