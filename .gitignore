@@ -17,14 +17,29 @@ data/processed/openpose_json/
 # ----------------------------------------------------------------------------
 # Upstream third-party code is not redistributed (cloned by setup script).
 # Our patches live under patches/ and are applied by scripts/setup_third_party.sh.
+# Exception: generated final_data/ skels/text/files are tracked (except train.skels
+# which exceeds GitHub's 100 MB limit — see train.skels.info for regeneration).
 # ----------------------------------------------------------------------------
-third_party/
+third_party/*
+!third_party/Prompt2Sign/
+third_party/Prompt2Sign/*
+!third_party/Prompt2Sign/tools/
+third_party/Prompt2Sign/tools/*
+!third_party/Prompt2Sign/tools/2D_to_3D/
+third_party/Prompt2Sign/tools/2D_to_3D/*
+!third_party/Prompt2Sign/tools/2D_to_3D/final_data/
+# train.skels is 220 MB — exceeds GitHub's 100 MB hard limit
+third_party/Prompt2Sign/tools/2D_to_3D/final_data/train.skels
 
 # ----------------------------------------------------------------------------
-# Training runs, predictions, and outputs are reproducible artefacts; excluded.
+# Training runs: track config, logs, and pointer files; exclude large checkpoints.
 # ----------------------------------------------------------------------------
 runs/
 predictions/
+# runs_diffusion/ checkpoints are too large for GitHub (695 MB each)
+runs_diffusion/**/*.pt
+runs_diffusion/**/*.pth
+runs_diffusion/**/*.ckpt
 
 # ----------------------------------------------------------------------------
 # Reference PDFs that are publicly fetchable (arXiv / Mendeley).

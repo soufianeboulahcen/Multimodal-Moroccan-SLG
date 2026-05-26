@@ -1,0 +1,56 @@
+{
+  "renders": [
+    {
+      "sign": "أَنَا",
+      "generated": "outputs/phase3_neon/أَنَا_neon_generated.mp4",
+      "comparison": "outputs/phase3_neon/أَنَا_neon_comparison.mp4"
+    },
+    {
+      "sign": "الأَذَانُ",
+      "generated": "outputs/phase3_neon/الأَذَانُ_neon_generated.mp4",
+      "comparison": "outputs/phase3_neon/الأَذَانُ_neon_comparison.mp4"
+    },
+    {
+      "sign": "السَّلَامُ عَلَيْكُمْ",
+      "generated": "outputs/phase3_neon/السَّلَامُ_عَلَيْكُمْ_neon_generated.mp4",
+      "comparison": "outputs/phase3_neon/السَّلَامُ_عَلَيْكُمْ_neon_comparison.mp4"
+    },
+    {
+      "sign": "المَغْرِبُ",
+      "generated": "outputs/phase3_neon/المَغْرِبُ_neon_generated.mp4",
+      "comparison": "outputs/phase3_neon/المَغْرِبُ_neon_comparison.mp4"
+    },
+    {
+      "sign": "اليَوْم",
+      "generated": "outputs/phase3_neon/اليَوْم_neon_generated.mp4",
+      "comparison": "outputs/phase3_neon/اليَوْم_neon_comparison.mp4"
+    },
+    {
+      "sign": "شُكْرًا",
+      "generated": "outputs/phase3_neon/شُكْرًا_neon_generated.mp4",
+      "comparison": "outputs/phase3_neon/شُكْرًا_neon_comparison.mp4"
+    },
+    {
+      "sign": "صَلَاةٌ",
+      "generated": "outputs/phase3_neon/صَلَاةٌ_neon_generated.mp4",
+      "comparison": "outputs/phase3_neon/صَلَاةٌ_neon_comparison.mp4"
+    },
+    {
+      "sign": "كِتَابٌ",
+      "generated": "outputs/phase3_neon/كِتَابٌ_neon_generated.mp4",
+      "comparison": "outputs/phase3_neon/كِتَابٌ_neon_comparison.mp4"
+    },
+    {
+      "sign": "مَاءٌ",
+      "generated": "outputs/phase3_neon/مَاءٌ_neon_generated.mp4",
+      "comparison": "outputs/phase3_neon/مَاءٌ_neon_comparison.mp4"
+    },
+    {
+      "sign": "مَدْرَسَةٌ",
+      "generated": "outputs/phase3_neon/مَدْرَسَةٌ_neon_generated.mp4",
+      "comparison": "outputs/phase3_neon/مَدْرَسَةٌ_neon_comparison.mp4"
+    }
+  ],
+  "fps": 50.0,
+  "frame_size": 512
+}

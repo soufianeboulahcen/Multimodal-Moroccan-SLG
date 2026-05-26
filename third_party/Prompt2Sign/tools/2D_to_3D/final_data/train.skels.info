@@ -1,0 +1,8 @@
+train.skels is excluded from Git (220 MB — exceeds GitHub's 100 MB file limit).
+
+Regenerate with:
+    python3 scripts/build_skels.py
+
+This reads data/processed/keypoints_2d/**/*.npz and data/splits.csv,
+and writes train.skels (1650 clips), dev.skels (419 clips), test.skels (110 clips)
+to this directory.

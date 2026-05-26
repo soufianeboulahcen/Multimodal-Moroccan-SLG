@@ -1,0 +1,111 @@
+{
+  "signs": [
+    {
+      "text": "الأَذَانُ",
+      "n_frames_generated": 150,
+      "n_frames_gt": 134,
+      "jerk_score": 0.15836,
+      "hand_flicker_rate": 0.1007,
+      "finger_instability": 0.00099,
+      "is_stable": false,
+      "elapsed_s": 14.57
+    },
+    {
+      "text": "المَغْرِبُ",
+      "n_frames_generated": 150,
+      "n_frames_gt": 86,
+      "jerk_score": 0.35726,
+      "hand_flicker_rate": 0.2752,
+      "finger_instability": 0.00241,
+      "is_stable": false,
+      "elapsed_s": 13.73
+    },
+    {
+      "text": "مَدْرَسَةٌ",
+      "n_frames_generated": 150,
+      "n_frames_gt": 76,
+      "jerk_score": 0.30931,
+      "hand_flicker_rate": 0.2148,
+      "finger_instability": 0.00301,
+      "is_stable": false,
+      "elapsed_s": 13.98
+    },
+    {
+      "text": "أَنَا",
+      "n_frames_generated": 150,
+      "n_frames_gt": 62,
+      "jerk_score": 0.29374,
+      "hand_flicker_rate": 0.2819,
+      "finger_instability": 0.00285,
+      "is_stable": false,
+      "elapsed_s": 14.38
+    },
+    {
+      "text": "اليَوْم",
+      "n_frames_generated": 150,
+      "n_frames_gt": 91,
+      "jerk_score": 0.37459,
+      "hand_flicker_rate": 0.2685,
+      "finger_instability": 0.002,
+      "is_stable": false,
+      "elapsed_s": 13.82
+    },
+    {
+      "text": "شُكْرًا",
+      "n_frames_generated": 150,
+      "n_frames_gt": 69,
+      "jerk_score": 0.20654,
+      "hand_flicker_rate": 0.2013,
+      "finger_instability": 0.00196,
+      "is_stable": false,
+      "elapsed_s": 13.7
+    },
+    {
+      "text": "السَّلَامُ عَلَيْكُمْ",
+      "n_frames_generated": 150,
+      "n_frames_gt": 80,
+      "jerk_score": 0.6172,
+      "hand_flicker_rate": 0.2081,
+      "finger_instability": 0.00428,
+      "is_stable": false,
+      "elapsed_s": 13.66
+    },
+    {
+      "text": "مَاءٌ",
+      "n_frames_generated": 150,
+      "n_frames_gt": 63,
+      "jerk_score": 0.21805,
+      "hand_flicker_rate": 0.1745,
+      "finger_instability": 0.00278,
+      "is_stable": false,
+      "elapsed_s": 13.87
+    },
+    {
+      "text": "كِتَابٌ",
+      "n_frames_generated": 150,
+      "n_frames_gt": 95,
+      "jerk_score": 0.16846,
+      "hand_flicker_rate": 0.1275,
+      "finger_instability": 0.00111,
+      "is_stable": false,
+      "elapsed_s": 13.49
+    },
+    {
+      "text": "صَلَاةٌ",
+      "n_frames_generated": 150,
+      "n_frames_gt": 70,
+      "jerk_score": 0.33031,
+      "hand_flicker_rate": 0.3221,
+      "finger_instability": 0.00309,
+      "is_stable": false,
+      "elapsed_s": 13.65
+    }
+  ],
+  "n_stable": 0,
+  "n_total": 10,
+  "stage": 1,
+  "cfg_scale": 2.5,
+  "n_sample_steps": 50,
+  "total_elapsed_s": 138.84,
+  "stability_rate": 0.0
+}

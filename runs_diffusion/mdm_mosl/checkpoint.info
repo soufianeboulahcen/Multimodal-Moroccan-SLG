@@ -1,0 +1,22 @@
+best.pt and last.pt are excluded from Git (695 MB each — exceeds GitHub's 100 MB file limit).
+
+Retrain with:
+    python3 -m mosl.train.diffusion_train \
+        --run-name mdm_mosl \
+        --out-dir runs_diffusion \
+        --batch-size 32 \
+        --max-epochs 300 \
+        --device cuda
+
+Or for CPU (3-epoch proof-of-concept):
+    python3 -m mosl.train.diffusion_train \
+        --run-name mdm_mosl \
+        --out-dir runs_diffusion \
+        --batch-size 8 \
+        --max-epochs 3 \
+        --no-bf16 \
+        --device cpu
+
+Training results (3 epochs, CPU):
+    best_dev_loss: 0.14314544053291375
+    epochs_trained: 3
