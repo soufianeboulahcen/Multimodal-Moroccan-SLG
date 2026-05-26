@@ -1,0 +1,77 @@
+# avatar_video_generator — dependency manifest
+# Photorealistic avatar rendering for the MoSL sign language pipeline.
+#
+# Install:
+#   pip install -r requirements_avatar.txt
+#
+# GPU requirements:
+#   - CUDA 11.8 or 12.1
+#   - ≥8 GB VRAM for SD1.5 + AnimateDiff (default config)
+#   - ≥16 GB VRAM for SDXL + AnimateDiff (dgx.yaml config)
+#
+# Python: 3.10+
+
+# ── PyTorch (CUDA 11.8) ──────────────────────────────────────────────────────
+# Adjust index URL for your CUDA version:
+#   CUDA 12.1: --extra-index-url https://download.pytorch.org/whl/cu121
+#   CPU only:  --extra-index-url https://download.pytorch.org/whl/cpu
+torch>=2.1.0
+torchvision>=0.16.0
+--extra-index-url https://download.pytorch.org/whl/cu118
+
+# ── Diffusers ecosystem ──────────────────────────────────────────────────────
+diffusers>=0.27.0           # AnimateDiffPipeline, ControlNetModel, MotionAdapter
+transformers>=4.38.0        # CLIP text encoder
+accelerate>=0.28.0          # device_map, CPU offload
+huggingface-hub>=0.22.0     # model download
+safetensors>=0.4.2          # .safetensors loading
+
+# ── ControlNet auxiliary ─────────────────────────────────────────────────────
+controlnet-aux>=0.0.7       # OpenposeDetector, DWposeDetector
+
+# ── Identity preservation ────────────────────────────────────────────────────
+insightface>=0.7.3          # ArcFace face embedding (buffalo_l model)
+onnxruntime-gpu>=1.17.0     # ONNX runtime for InsightFace (GPU)
+# onnxruntime>=1.17.0       # CPU-only alternative
+
+# ── Vision & image processing ────────────────────────────────────────────────
+opencv-python>=4.9.0        # video I/O, optical flow, face detection
+Pillow>=10.0.0              # image manipulation
+imageio>=2.34.0             # MP4 encoding fallback
+imageio-ffmpeg>=0.4.9       # ffmpeg backend for imageio
+
+# ── Scientific computing ─────────────────────────────────────────────────────
+numpy>=1.24.0
+scipy>=1.11.0               # gaussian_filter1d for temporal smoothing
+
+# ── Memory optimisation ──────────────────────────────────────────────────────
+xformers>=0.0.23            # memory-efficient attention (optional but recommended)
+                            # Install separately if version conflicts:
+                            # pip install xformers --index-url https://download.pytorch.org/whl/cu118
+
+# ── Utilities ────────────────────────────────────────────────────────────────
+tqdm>=4.66.0                # progress bars
+einops>=0.7.0               # tensor operations (required by AnimateDiff)
+omegaconf>=2.3.0            # YAML config (required by some ControlNet models)
+pyyaml>=6.0                 # YAML parsing for AvatarConfig
+
+# ── Optional: IP-Adapter FaceID ─────────────────────────────────────────────
+# Provides richer identity conditioning than InsightFace alone.
+# Install separately after the above:
+#   pip install git+https://github.com/tencent-ailab/IP-Adapter.git
+#
+# Then download the model weights:
+#   huggingface-cli download h94/IP-Adapter-FaceID \
+#       ip-adapter-faceid_sd15.bin \
+#       --local-dir models/
+
+# ── Optional: RIFE frame interpolation ──────────────────────────────────────
+# For GPU-accelerated RIFE (rife-ncnn-vulkan):
+#   Download from https://github.com/nihui/rife-ncnn-vulkan/releases
+#   and place the binary on PATH.
+#
+# For PyTorch RIFE:
+#   git clone https://github.com/megvii-research/ECCV2022-RIFE third_party/ECCV2022-RIFE
+#   (no pip install needed — imported directly from third_party/)
+#
+# The linear-blend fallback is always available with no extra dependencies.

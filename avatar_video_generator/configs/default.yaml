@@ -1,0 +1,70 @@
+# avatar_video_generator — default configuration
+# Tuned for the MoSL dataset on a single GPU (8–16 GB VRAM).
+# Override individual fields; unset fields use Python defaults.
+
+device: "cuda"
+output_dir: "outputs/avatar_photorealistic"
+reference_frames_dir: "outputs/avatar_photorealistic/reference_frames"
+cache_dir: "outputs/avatar_photorealistic/.cache"
+verbose: true
+
+identity:
+  backend: "insightface"          # "insightface" | "ip_adapter" | "none"
+  ip_adapter_scale: 0.8
+  face_crop_size: 224
+  reference_frame_idx: 0
+  multi_frame_average: true
+  multi_frame_count: 5
+
+diffusion:
+  # SD1.5 is the default for 8 GB VRAM compatibility.
+  # Switch use_sdxl: true for higher quality on 16+ GB VRAM.
+  use_sdxl: false
+  use_animatediff: true
+  base_model: "stabilityai/stable-diffusion-xl-base-1.0"
+  base_model_sd15: "runwayml/stable-diffusion-v1-5"
+  controlnet_model_sdxl: "thibaud/controlnet-openpose-sdxl-1.0"
+  controlnet_model_sd15: "lllyasviel/control_v11p_sd15_openpose"
+  motion_module: "guoyww/animatediff-motion-adapter-v1-5-2"
+  resolution: 512
+  num_inference_steps: 25
+  guidance_scale: 7.5
+  controlnet_conditioning_scale: 1.0
+  seed: 42
+  video_length: 16
+  video_stride: 8
+  positive_prompt: >
+    a Moroccan sign language interpreter, upper body portrait,
+    natural skin tone, dark hair, professional appearance,
+    studio lighting, sharp focus, photorealistic, 8k DSLR,
+    cinematic, realistic skin texture, clear expressive hands,
+    natural eye contact, neutral background
+  negative_prompt: >
+    skeleton, stick figure, cartoon, anime, illustration, drawing,
+    blurry, low quality, deformed hands, extra fingers, missing fingers,
+    watermark, text, logo, nsfw, ugly, distorted face,
+    ghosting, flickering, artifacts, CGI, 3D render, plastic skin
+  enable_xformers: true
+  enable_cpu_offload: false
+  use_fp16: true
+
+temporal:
+  pixel_smooth_sigma: 0.8
+  latent_blend_alpha: 0.12
+  latent_blend_window: 3
+  use_flow_warp: false
+
+interpolation:
+  enabled: true
+  multiplier: 2
+  model_version: "4.6"
+  output_fps: 50.0
+  fallback_blend: true
+
+export:
+  fps: 25.0
+  codec: "libx264"
+  crf: 18
+  pixel_format: "yuv420p"
+  export_comparison: true
+  comparison_path_suffix: "_comparison"

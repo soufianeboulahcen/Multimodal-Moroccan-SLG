@@ -1,0 +1,69 @@
+# avatar_video_generator — DGX / high-VRAM configuration
+# Optimised for NVIDIA DGX A100 (40/80 GB VRAM per GPU).
+# Enables SDXL + AnimateDiff at 768px for maximum quality.
+
+device: "cuda"
+output_dir: "outputs/avatar_photorealistic"
+reference_frames_dir: "outputs/avatar_photorealistic/reference_frames"
+cache_dir: "outputs/avatar_photorealistic/.cache"
+verbose: true
+
+identity:
+  backend: "insightface"
+  ip_adapter_scale: 0.85
+  face_crop_size: 256
+  multi_frame_average: true
+  multi_frame_count: 8
+
+diffusion:
+  use_sdxl: true
+  use_animatediff: true
+  base_model: "stabilityai/stable-diffusion-xl-base-1.0"
+  base_model_sd15: "runwayml/stable-diffusion-v1-5"
+  controlnet_model_sdxl: "thibaud/controlnet-openpose-sdxl-1.0"
+  controlnet_model_sd15: "lllyasviel/control_v11p_sd15_openpose"
+  motion_module: "guoyww/animatediff-motion-adapter-v1-5-2"
+  resolution: 768
+  num_inference_steps: 40
+  guidance_scale: 8.0
+  controlnet_conditioning_scale: 1.0
+  seed: 42
+  video_length: 24
+  video_stride: 12
+  positive_prompt: >
+    a Moroccan sign language interpreter, upper body portrait,
+    natural medium skin tone, dark hair, professional appearance,
+    cinematic studio lighting, sharp focus, photorealistic, 8k DSLR,
+    movie quality, realistic skin texture, subsurface scattering,
+    clear expressive hands with detailed fingers,
+    natural eye contact, soft bokeh background
+  negative_prompt: >
+    skeleton, stick figure, cartoon, anime, illustration, drawing,
+    blurry, low quality, deformed hands, extra fingers, missing fingers,
+    watermark, text, logo, nsfw, ugly, distorted face,
+    ghosting, flickering, artifacts, CGI, 3D render, plastic skin,
+    overexposed, underexposed, noise, grain
+  enable_xformers: true
+  enable_cpu_offload: false
+  use_fp16: true
+
+temporal:
+  pixel_smooth_sigma: 0.6
+  latent_blend_alpha: 0.10
+  latent_blend_window: 4
+  use_flow_warp: true
+
+interpolation:
+  enabled: true
+  multiplier: 4
+  model_version: "4.14"
+  output_fps: 100.0
+  fallback_blend: true
+
+export:
+  fps: 25.0
+  codec: "libx264"
+  crf: 16
+  pixel_format: "yuv420p"
+  export_comparison: true
+  comparison_path_suffix: "_comparison"
