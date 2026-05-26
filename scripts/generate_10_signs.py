@@ -79,8 +79,29 @@ def _load_pipeline(
     from mosl.train.noise_schedule import NoiseSchedule
 
     tok = WordTokenizer.load(vocab_path)
-    signllm_cfg = SignLLMConfig(vocab_size=tok.vocab_size)
+
+    # Load MDM + SignLLM configs from checkpoint when available so model
+    # architecture matches exactly what was trained, regardless of defaults.
     mdm_cfg = MDMConfig()
+    signllm_cfg = SignLLMConfig(vocab_size=tok.vocab_size)
+    if diffusion_checkpoint and Path(diffusion_checkpoint).exists():
+        _peek = torch.load(diffusion_checkpoint, map_location="cpu", weights_only=True)
+        if "mdm_config" in _peek:
+            from dataclasses import fields
+            stored = _peek["mdm_config"]
+            for f in fields(mdm_cfg):
+                if f.name in stored:
+                    setattr(mdm_cfg, f.name, stored[f.name])
+        if "signllm_config" in _peek:
+            stored = _peek["signllm_config"]
+            from dataclasses import fields
+            for f in fields(signllm_cfg):
+                if f.name in stored:
+                    setattr(signllm_cfg, f.name, stored[f.name])
+        elif "mdm_config" in _peek and "text_d_model" in _peek["mdm_config"]:
+            # Infer SignLLM d_model from the projection dim stored in mdm_config
+            signllm_cfg.d_model = _peek["mdm_config"]["text_d_model"]
+            signllm_cfg.nhead = max(1, signllm_cfg.d_model // 64)
 
     model = MDMDenoiser(mdm_cfg, signllm_cfg).to(device)
 

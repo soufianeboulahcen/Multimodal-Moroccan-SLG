@@ -96,3 +96,16 @@ docs/THESIS_INTEGRATION_STRATEGY.md
 *.log
 wandb/
 lightning_logs/
+
+# ----------------------------------------------------------------------------
+# Generated outputs and result archives (large binaries; re-generatable)
+# ----------------------------------------------------------------------------
+outputs/
+FINAL_RESULTS.zip
+
+# ----------------------------------------------------------------------------
+# Pipeline runner scripts (environment-specific, not part of the codebase)
+# ----------------------------------------------------------------------------
+run_pipeline.sh
+run_post_training.sh
+run_signllm_train.sh

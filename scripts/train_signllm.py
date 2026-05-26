@@ -43,10 +43,21 @@ def main() -> int:
     p.add_argument("--num-workers", type=int, default=4)
     p.add_argument("--out-dir", default="runs")
     p.add_argument("--vocab", default="data/processed/vocab.json")
+    # Model size overrides (useful for CPU runs)
+    p.add_argument("--d-model", type=int, default=768)
+    p.add_argument("--nhead", type=int, default=12)
+    p.add_argument("--n-enc-layers", type=int, default=2)
+    p.add_argument("--n-dec-layers", type=int, default=2)
     args = p.parse_args()
 
     tok = WordTokenizer.load(args.vocab)
-    model_cfg = SignLLMConfig(vocab_size=tok.vocab_size)
+    model_cfg = SignLLMConfig(
+        vocab_size=tok.vocab_size,
+        d_model=args.d_model,
+        nhead=args.nhead,
+        n_enc_layers=args.n_enc_layers,
+        n_dec_layers=args.n_dec_layers,
+    )
     train_cfg = TrainConfig(
         out_dir=args.out_dir,
         run_name=args.run_name,

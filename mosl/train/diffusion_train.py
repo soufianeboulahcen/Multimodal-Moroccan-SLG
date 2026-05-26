@@ -367,11 +367,34 @@ if __name__ == "__main__":
     parser.add_argument("--cfg-scale", type=float, default=2.5,
                         help="CFG guidance scale at inference (default: 2.5)")
     parser.add_argument("--resume-from", default=None)
+    # SignLLM encoder size — must match the checkpoint used in --signllm-checkpoint
+    parser.add_argument("--signllm-d-model", type=int, default=768)
+    parser.add_argument("--signllm-nhead", type=int, default=12)
+    parser.add_argument("--signllm-enc-layers", type=int, default=2)
+    parser.add_argument("--signllm-dec-layers", type=int, default=2)
+    # MDM denoiser size overrides (reduce for CPU runs)
+    parser.add_argument("--mdm-d-model", type=int, default=512)
+    parser.add_argument("--mdm-nhead", type=int, default=8)
+    parser.add_argument("--mdm-d-ff", type=int, default=2048)
+    parser.add_argument("--mdm-n-layers", type=int, default=8)
     args = parser.parse_args()
 
     tok = WordTokenizer.load("data/processed/vocab.json")
-    signllm_cfg = SignLLMConfig(vocab_size=tok.vocab_size)
-    mdm_cfg = MDMConfig(signllm_checkpoint=args.signllm_checkpoint)
+    signllm_cfg = SignLLMConfig(
+        vocab_size=tok.vocab_size,
+        d_model=args.signllm_d_model,
+        nhead=args.signllm_nhead,
+        n_enc_layers=args.signllm_enc_layers,
+        n_dec_layers=args.signllm_dec_layers,
+    )
+    mdm_cfg = MDMConfig(
+        signllm_checkpoint=args.signllm_checkpoint,
+        text_d_model=args.signllm_d_model,  # must match SignLLM encoder output dim
+        d_model=args.mdm_d_model,
+        nhead=args.mdm_nhead,
+        d_ff=args.mdm_d_ff,
+        n_layers=args.mdm_n_layers,
+    )
     train_cfg = DiffusionTrainConfig(
         run_name=args.run_name,
         out_dir=args.out_dir,
