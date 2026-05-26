@@ -1,6 +1,9 @@
-# avatar_video_generator — CPU-only / low-VRAM fallback configuration
-# Disables diffusion (requires GPU). Uses ControlNet SD1.5 with CPU offload.
-# Very slow — intended for testing pipeline correctness without a GPU.
+# avatar_video_generator — CPU-only fallback configuration
+# Uses ControlNet-OpenPose + SD1.5 on CPU with keyframe generation + interpolation.
+# Tested: ~150s/keyframe on a modern CPU core.
+#
+# For a 56-frame sign at stride=4 (14 keyframes): ~35 min total.
+# For a quick 3-keyframe test: ~8 min.
 
 device: "cpu"
 output_dir: "outputs/avatar_photorealistic"
@@ -8,34 +11,40 @@ cache_dir: "outputs/avatar_photorealistic/.cache"
 verbose: true
 
 identity:
-  backend: "none"               # InsightFace requires ONNX runtime (slow on CPU)
+  backend: "none"               # InsightFace ONNX is slow on CPU; use prompt-only
   multi_frame_average: false
   multi_frame_count: 1
 
 diffusion:
   use_sdxl: false
-  use_animatediff: false        # AnimateDiff requires GPU
+  use_animatediff: false        # AnimateDiff needs GPU
   base_model_sd15: "runwayml/stable-diffusion-v1-5"
   controlnet_model_sd15: "lllyasviel/control_v11p_sd15_openpose"
-  resolution: 512
-  num_inference_steps: 10       # fewer steps for speed
-  guidance_scale: 7.0
+  resolution: 256               # 256px is ~2x faster than 512px on CPU
+  num_inference_steps: 8        # 8 steps: good quality/speed balance on CPU
+  guidance_scale: 7.5
   controlnet_conditioning_scale: 1.0
   seed: 42
+  video_length: 4               # keyframe stride for CPU mode
+  video_stride: 4
   enable_xformers: false
   enable_cpu_offload: true
-  use_fp16: false               # float32 on CPU
+  use_fp16: false               # float32 required on CPU
 
 temporal:
-  pixel_smooth_sigma: 1.0
+  pixel_smooth_sigma: 0.8
   use_flow_warp: false
 
 interpolation:
-  enabled: false                # RIFE requires GPU for reasonable speed
+  enabled: true
+  multiplier: 2
+  fallback_blend: true          # linear blend (no RIFE needed)
+  output_fps: 50.0
 
 export:
   fps: 25.0
   codec: "libx264"
-  crf: 23
+  crf: 18
   pixel_format: "yuv420p"
-  export_comparison: false
+  export_comparison: true
+  comparison_path_suffix: "_comparison"

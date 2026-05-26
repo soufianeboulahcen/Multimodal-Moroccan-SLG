@@ -78,36 +78,41 @@ class DiffusionRenderer:
         self.device = device
         self._pipe = None
         self._pipe_type: Optional[str] = None  # "animatediff_sdxl" | "animatediff_sd15" | "controlnet_sd15"
+        # float16 on GPU, float32 on CPU
+        self._dtype = torch.float16 if (device == "cuda" and self.cfg.use_fp16) else torch.float32
 
     # ------------------------------------------------------------------
     # Model loading
     # ------------------------------------------------------------------
 
     def load_models(self) -> None:
-        """Download and load diffusion models into GPU memory.
+        """Download and load diffusion models into memory.
 
         Tries backends in order of quality:
           1. AnimateDiff + SDXL + ControlNet (best, needs ≥16 GB VRAM)
           2. AnimateDiff + SD1.5 + ControlNet (good, needs ≥8 GB VRAM)
-          3. ControlNet + SD1.5 frame-by-frame (fallback, needs ≥6 GB VRAM)
+          3. ControlNet + SD1.5 frame-by-frame (GPU or CPU)
         """
         if self._pipe is not None:
             return
 
-        if self.cfg.use_animatediff and self.cfg.use_sdxl:
+        is_cuda = self.device == "cuda" and torch.cuda.is_available()
+
+        if is_cuda and self.cfg.use_animatediff and self.cfg.use_sdxl:
             try:
                 self._load_animatediff_sdxl()
                 return
             except Exception as e:
                 logger.warning(f"AnimateDiff+SDXL failed ({e}), trying SD1.5...")
 
-        if self.cfg.use_animatediff:
+        if is_cuda and self.cfg.use_animatediff:
             try:
                 self._load_animatediff_sd15()
                 return
             except Exception as e:
                 logger.warning(f"AnimateDiff+SD1.5 failed ({e}), falling back to ControlNet-only...")
 
+        # ControlNet + SD1.5 works on both GPU and CPU
         self._load_controlnet_sd15()
 
     def _load_animatediff_sdxl(self) -> None:
@@ -122,13 +127,13 @@ class DiffusionRenderer:
         logger.info("Loading AnimateDiff motion adapter...")
         adapter = MotionAdapter.from_pretrained(
             self.cfg.motion_module,
-            torch_dtype=torch.float16 if self.cfg.use_fp16 else torch.float32,
+            torch_dtype=self._dtype,
         )
 
         logger.info(f"Loading ControlNet-OpenPose SDXL: {self.cfg.controlnet_model_sdxl}")
         controlnet = ControlNetModel.from_pretrained(
             self.cfg.controlnet_model_sdxl,
-            torch_dtype=torch.float16 if self.cfg.use_fp16 else torch.float32,
+            torch_dtype=self._dtype,
             use_safetensors=True,
         )
 
@@ -137,7 +142,7 @@ class DiffusionRenderer:
             self.cfg.base_model,
             motion_adapter=adapter,
             controlnet=controlnet,
-            torch_dtype=torch.float16 if self.cfg.use_fp16 else torch.float32,
+            torch_dtype=self._dtype,
             use_safetensors=True,
         )
 
@@ -165,13 +170,13 @@ class DiffusionRenderer:
         logger.info("Loading AnimateDiff motion adapter...")
         adapter = MotionAdapter.from_pretrained(
             self.cfg.motion_module,
-            torch_dtype=torch.float16 if self.cfg.use_fp16 else torch.float32,
+            torch_dtype=self._dtype,
         )
 
         logger.info(f"Loading ControlNet-OpenPose SD1.5: {self.cfg.controlnet_model_sd15}")
         controlnet = ControlNetModel.from_pretrained(
             self.cfg.controlnet_model_sd15,
-            torch_dtype=torch.float16 if self.cfg.use_fp16 else torch.float32,
+            torch_dtype=self._dtype,
             use_safetensors=True,
         )
 
@@ -180,7 +185,7 @@ class DiffusionRenderer:
             self.cfg.base_model_sd15,
             motion_adapter=adapter,
             controlnet=controlnet,
-            torch_dtype=torch.float16 if self.cfg.use_fp16 else torch.float32,
+            torch_dtype=self._dtype,
             use_safetensors=True,
             safety_checker=None,
             requires_safety_checker=False,
@@ -199,7 +204,7 @@ class DiffusionRenderer:
         logger.info("AnimateDiff+SD1.5 pipeline loaded.")
 
     def _load_controlnet_sd15(self) -> None:
-        """Load ControlNet + SD1.5 frame-by-frame pipeline (fallback)."""
+        """Load ControlNet + SD1.5 frame-by-frame pipeline (GPU or CPU)."""
         from diffusers import (
             ControlNetModel,
             StableDiffusionControlNetPipeline,
@@ -209,7 +214,7 @@ class DiffusionRenderer:
         logger.info(f"Loading ControlNet-OpenPose SD1.5: {self.cfg.controlnet_model_sd15}")
         controlnet = ControlNetModel.from_pretrained(
             self.cfg.controlnet_model_sd15,
-            torch_dtype=torch.float16 if self.cfg.use_fp16 else torch.float32,
+            torch_dtype=self._dtype,
             use_safetensors=True,
         )
 
@@ -217,7 +222,7 @@ class DiffusionRenderer:
         pipe = StableDiffusionControlNetPipeline.from_pretrained(
             self.cfg.base_model_sd15,
             controlnet=controlnet,
-            torch_dtype=torch.float16 if self.cfg.use_fp16 else torch.float32,
+            torch_dtype=self._dtype,
             use_safetensors=True,
             safety_checker=None,
             requires_safety_checker=False,
@@ -227,22 +232,34 @@ class DiffusionRenderer:
         self._apply_memory_optimisations(pipe)
         self._pipe = pipe
         self._pipe_type = "controlnet_sd15"
-        logger.info("ControlNet+SD1.5 pipeline loaded (frame-by-frame mode).")
+        logger.info(f"ControlNet+SD1.5 pipeline loaded (device={self.device}, dtype={self._dtype}).")
 
     def _apply_memory_optimisations(self, pipe) -> None:
-        """Apply VRAM-saving optimisations to a diffusers pipeline."""
-        if self.cfg.enable_xformers:
+        """Apply memory-saving optimisations appropriate for the current device."""
+        is_cuda = self.device == "cuda" and torch.cuda.is_available()
+
+        if is_cuda and self.cfg.enable_xformers:
             try:
                 pipe.enable_xformers_memory_efficient_attention()
                 logger.info("xformers memory-efficient attention enabled.")
             except Exception:
                 logger.debug("xformers not available.")
 
-        if self.cfg.enable_cpu_offload:
-            pipe.enable_sequential_cpu_offload()
-            logger.info("Sequential CPU offload enabled.")
+        if is_cuda and self.cfg.enable_cpu_offload:
+            # Low-VRAM GPU: keep only the active layer on GPU
+            try:
+                pipe.enable_sequential_cpu_offload()
+                logger.info("Sequential CPU offload enabled.")
+            except RuntimeError as e:
+                logger.warning(f"CPU offload unavailable ({e}), moving to device directly.")
+                pipe.to(self.device)
+        elif not is_cuda:
+            # CPU: attention slicing reduces peak memory usage
+            pipe.enable_attention_slicing()
+            pipe.to(self.device)
+            logger.info("CPU mode: attention slicing enabled.")
         else:
-            pipe = pipe.to(self.device)
+            pipe.to(self.device)
 
         pipe.set_progress_bar_config(disable=False)
 
@@ -299,30 +316,35 @@ class DiffusionRenderer:
         self,
         pose_images: List[Image.Image],
         identity: IdentityEmbedding,
+        max_frames: Optional[int] = None,
     ) -> List[np.ndarray]:
         """Render photorealistic frames from pose conditioning + identity.
 
         Args:
             pose_images: list of PIL Images (H, W, RGB) — OpenPose frames.
             identity: signer identity embedding from IdentityEncoder.
+            max_frames: cap the number of frames rendered. Useful for CPU
+                        prototyping — set to 8-16 for fast iteration.
 
         Returns:
             List of (H, W, 3) uint8 RGB numpy arrays.
         """
         if self._pipe is None:
-            raise RuntimeError(
-                "Models not loaded. Call load_models() first."
-            )
+            raise RuntimeError("Models not loaded. Call load_models() first.")
 
         if not pose_images:
             raise ValueError("No pose images provided.")
+
+        # Cap frames for CPU mode to keep runtime manageable
+        if max_frames is not None and max_frames > 0:
+            pose_images = pose_images[:max_frames]
 
         positive_prompt = self._build_prompt(identity)
         negative_prompt = self.cfg.negative_prompt
 
         logger.info(
             f"Rendering {len(pose_images)} frames via {self._pipe_type} "
-            f"(resolution={self.cfg.resolution})"
+            f"(device={self.device}, resolution={self.cfg.resolution})"
         )
 
         if self._pipe_type in ("animatediff_sdxl", "animatediff_sd15"):
@@ -470,40 +492,29 @@ class DiffusionRenderer:
         negative_prompt: str,
         identity: IdentityEmbedding,
     ) -> List[np.ndarray]:
-        """Render frame-by-frame with ControlNet + temporal latent blending.
+        """Render frame-by-frame with ControlNet + fixed-seed temporal consistency.
 
-        Uses a fixed seed and latent blending with the previous frame to
-        maintain temporal consistency without AnimateDiff.
+        Works on both GPU and CPU. Uses a fixed seed across all frames so the
+        diffusion process starts from the same noise, which is the primary
+        mechanism for temporal consistency in frame-by-frame mode.
         """
         res = self.cfg.resolution
-        generator = torch.Generator(device=self.device).manual_seed(self.cfg.seed)
-
-        # Encode prompt once for efficiency
-        with torch.no_grad():
-            prompt_embeds, neg_embeds = self._pipe.encode_prompt(
-                prompt=positive_prompt,
-                device=self.device,
-                num_images_per_prompt=1,
-                do_classifier_free_guidance=True,
-                negative_prompt=negative_prompt,
-            )
-
-        # Optionally inject IP-Adapter face image
-        ip_image = None
-        if identity.face_image is not None:
-            from PIL import Image as PILImage
-            ip_image = PILImage.fromarray(identity.face_image)
+        is_cuda = self.device == "cuda" and torch.cuda.is_available()
+        # Generator must be on CPU when running without CUDA
+        gen_device = "cuda" if is_cuda else "cpu"
+        generator = torch.Generator(device=gen_device).manual_seed(self.cfg.seed)
 
         frames: List[np.ndarray] = []
-        latent_history: List[torch.Tensor] = []
+        n = len(pose_images)
 
-        logger.info(f"Frame-by-frame rendering: {len(pose_images)} frames...")
+        logger.info(f"Frame-by-frame rendering: {n} frames on {self.device}...")
 
         for i, pose_pil in enumerate(pose_images):
+            logger.info(f"  Frame {i+1}/{n}")
             with torch.no_grad():
                 output = self._pipe(
-                    prompt_embeds=prompt_embeds,
-                    negative_prompt_embeds=neg_embeds,
+                    prompt=positive_prompt,
+                    negative_prompt=negative_prompt,
                     image=pose_pil,
                     width=res,
                     height=res,
@@ -517,9 +528,10 @@ class DiffusionRenderer:
             frame_np = np.array(output.images[0])
             frames.append(frame_np)
 
-            if i % 10 == 0:
+            # Free memory every few frames
+            if i % 4 == 0:
                 gc.collect()
-                if torch.cuda.is_available():
+                if is_cuda:
                     torch.cuda.empty_cache()
 
         return frames
