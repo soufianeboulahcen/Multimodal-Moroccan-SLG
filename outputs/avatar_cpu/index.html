@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>MoSL Avatar Videos</title>
+<style>
+  body { background:#111; color:#eee; font-family:sans-serif; padding:20px; }
+  h1 { color:#0af; }
+  .grid { display:flex; gap:30px; flex-wrap:wrap; }
+  .card { background:#1a1a2e; border-radius:12px; padding:16px; }
+  video { border-radius:8px; display:block; }
+  p { margin:8px 0 0; color:#aaa; font-size:14px; }
+</style>
+</head>
+<body>
+<h1>MoSL Avatar — Génération Vidéo</h1>
+<p style="color:#888">Signes de la Langue des Signes Marocaine — rendu depuis keypoints OpenPose</p>
+<div class="grid">
+  <div class="card">
+    <video width="400" controls autoplay loop muted>
+      <source src="sample_avatar_studio.mp4" type="video/mp4">
+    </video>
+    <p>Mode Studio — silhouette + squelette coloré</p>
+  </div>
+  <div class="card">
+    <video width="400" controls autoplay loop muted>
+      <source src="sample_avatar_neon.mp4" type="video/mp4">
+    </video>
+    <p>Mode Neon — squelette lumineux avec glow</p>
+  </div>
+</div>
+</body>
+</html>

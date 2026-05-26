@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<title>MoSL Avatar HD</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#080808;color:#eee;font-family:"Segoe UI",sans-serif;padding:28px}
+h1{color:#5bf;font-size:1.7rem;margin-bottom:4px;letter-spacing:.5px}
+.sub{color:#666;font-size:.88rem;margin-bottom:30px}
+.grid{display:flex;gap:28px;flex-wrap:wrap;justify-content:center}
+.card{background:#111;border-radius:16px;padding:20px;width:380px;border:1px solid #1e1e2e;box-shadow:0 8px 32px rgba(0,0,0,.6);transition:transform .25s,box-shadow .25s}
+.card:hover{transform:translateY(-6px);box-shadow:0 16px 48px rgba(0,0,0,.8)}
+.badge{display:inline-block;padding:4px 12px;border-radius:20px;font-size:.72rem;font-weight:700;margin-bottom:12px;letter-spacing:.8px;text-transform:uppercase}
+.casual .badge{background:#0d2a45;color:#5bf;border:1px solid #1a4a7a}
+.formal .badge{background:#2a1a08;color:#fb8;border:1px solid #5a3a18}
+.traditional .badge{background:#0a2a0a;color:#8f4;border:1px solid #1a5a1a}
+video{width:100%;border-radius:10px;display:block;background:#000;border:1px solid #1a1a2a}
+.desc{margin-top:12px;color:#999;font-size:.82rem;line-height:1.6}
+.meta{margin-top:8px;display:flex;gap:8px;flex-wrap:wrap}
+.tag{background:#161616;border:1px solid #2a2a2a;border-radius:5px;padding:2px 8px;font-size:.72rem;color:#666}
+</style></head>
+<body>
+<h1>MoSL — Avatar Habillé HD</h1>
+<p class="sub">Langue des Signes Marocaine &nbsp;·&nbsp; 768×768 &nbsp;·&nbsp; 25 fps &nbsp;·&nbsp; lissage temporel &nbsp;·&nbsp; 3 tenues</p>
+<div class="grid">
+  <div class="card casual">
+    <span class="badge">Décontractée</span>
+    <video controls autoplay loop muted playsinline>
+      <source src="sample_casual_hd.mp4" type="video/mp4">
+    </video>
+    <p class="desc">T-shirt blanc &nbsp;·&nbsp; Jean bleu &nbsp;·&nbsp; Baskets blanches</p>
+    <div class="meta"><span class="tag">casual</span><span class="tag">768×768</span><span class="tag">25fps</span></div>
+  </div>
+  <div class="card formal">
+    <span class="badge">Formelle</span>
+    <video controls autoplay loop muted playsinline>
+      <source src="sample_formal_hd.mp4" type="video/mp4">
+    </video>
+    <p class="desc">Chemise bleue &nbsp;·&nbsp; Pantalon noir &nbsp;·&nbsp; Chaussures noires</p>
+    <div class="meta"><span class="tag">formal</span><span class="tag">768×768</span><span class="tag">25fps</span></div>
+  </div>
+  <div class="card traditional">
+    <span class="badge">Traditionnelle</span>
+    <video controls autoplay loop muted playsinline>
+      <source src="sample_traditional_hd.mp4" type="video/mp4">
+    </video>
+    <p class="desc">Djellaba blanche brodée &nbsp;·&nbsp; Babouches dorées</p>
+    <div class="meta"><span class="tag">traditional</span><span class="tag">768×768</span><span class="tag">25fps</span></div>
+  </div>
+</div>
+</body></html>
