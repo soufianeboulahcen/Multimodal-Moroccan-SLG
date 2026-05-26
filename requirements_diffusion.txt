@@ -1,0 +1,56 @@
+# Dépendances pour le pipeline Pose-to-Video ControlNet (MoSL)
+# Installation : pip install -r requirements_diffusion.txt
+#
+# GPU recommandé : NVIDIA ≥ 8 GB VRAM (RTX 3080 / A100 / T4)
+# CUDA : 11.8 ou 12.1
+# Python : 3.10+
+
+# ── PyTorch (CUDA 11.8) ──────────────────────────────────────────────────────
+# Adapter la version CUDA si nécessaire :
+#   CUDA 12.1 : torch==2.2.0+cu121
+#   CPU only  : torch==2.2.0+cpu
+torch==2.2.0+cu118
+torchvision==0.17.0+cu118
+torchaudio==2.2.0+cu118
+--extra-index-url https://download.pytorch.org/whl/cu118
+
+# ── Diffusers & HuggingFace ──────────────────────────────────────────────────
+diffusers==0.27.2          # StableDiffusionControlNetPipeline, UniPCMultistepScheduler
+transformers==4.40.1       # CLIP text encoder, tokenizer
+accelerate==0.29.3         # device_map, CPU offload
+huggingface-hub==0.22.2    # téléchargement automatique des modèles
+safetensors==0.4.3         # chargement .safetensors (plus rapide que .bin)
+
+# ── ControlNet auxiliaire ────────────────────────────────────────────────────
+controlnet-aux==0.0.7      # OpenposeDetector, DWposeDetector
+
+# ── Vision & traitement image ────────────────────────────────────────────────
+opencv-python==4.9.0.80    # lecture/écriture vidéo, rendu squelette
+Pillow==10.3.0             # manipulation images PIL
+imageio==2.34.1            # encodage MP4
+imageio-ffmpeg==0.4.9      # backend ffmpeg pour imageio
+
+# ── Calcul scientifique ──────────────────────────────────────────────────────
+numpy==1.26.4
+scipy==1.13.0              # gaussian_filter1d pour lissage temporel
+
+# ── Optimisation mémoire GPU ─────────────────────────────────────────────────
+xformers==0.0.25           # attention efficace (optionnel mais recommandé)
+                           # Installer séparément si incompatible :
+                           # pip install xformers --index-url https://download.pytorch.org/whl/cu118
+
+# ── Utilitaires ──────────────────────────────────────────────────────────────
+tqdm==4.66.2               # barres de progression
+einops==0.7.0              # opérations tenseur lisibles (requis par certains modèles)
+omegaconf==2.3.0           # configuration YAML (requis par ControlNet)
+
+# ── Notes d'installation ─────────────────────────────────────────────────────
+# 1. Vérifier la version CUDA : nvcc --version
+# 2. Si xformers échoue : pip install xformers --no-deps
+# 3. Pour CPU uniquement (très lent) :
+#    pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+#    puis le reste sans xformers
+# 4. Les modèles sont téléchargés automatiquement depuis HuggingFace (~5 GB) :
+#    - runwayml/stable-diffusion-v1-5
+#    - lllyasviel/control_v11p_sd15_openpose
+#    Proxy HF : export HF_ENDPOINT=https://hf-mirror.com (si accès limité)
