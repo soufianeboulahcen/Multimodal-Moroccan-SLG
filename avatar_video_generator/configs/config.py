@@ -148,6 +148,9 @@ class ExportConfig:
     codec: str = "libx264"
     crf: int = 18                         # quality (0=lossless, 23=default, 51=worst)
     pixel_format: str = "yuv420p"
+    # Export generated avatar PNG frames next to the final MP4.
+    export_frames: bool = True
+    frames_path_suffix: str = "_frames"
     # Side-by-side comparison output (pose | avatar)
     export_comparison: bool = True
     comparison_path_suffix: str = "_comparison"

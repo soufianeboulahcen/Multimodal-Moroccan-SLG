@@ -12,6 +12,7 @@
 #   bash run_avatar_photorealistic.sh --sign أَنْتِ           # explicit sign
 #   bash run_avatar_photorealistic.sh --batch                # all signs
 #   bash run_avatar_photorealistic.sh --dgx                  # DGX high-quality
+#   bash run_avatar_photorealistic.sh --official-hd-openpose # HD OpenPose prototype
 #   bash run_avatar_photorealistic.sh --no-sdxl              # SD1.5 fallback
 #   bash run_avatar_photorealistic.sh --no-rife              # skip interpolation
 #   bash run_avatar_photorealistic.sh --steps 40 --res 768   # quality override
@@ -30,6 +31,7 @@ cd "$REPO_ROOT"
 SIGN="أَنْتِ"
 BATCH=false
 DGX=false
+OFFICIAL_HD_OPENPOSE=false
 CONFIG=""
 EXTRA_ARGS=()
 
@@ -39,7 +41,14 @@ while [[ $# -gt 0 ]]; do
         --sign)           SIGN="$2";                    shift 2 ;;
         --batch)          BATCH=true;                   shift   ;;
         --dgx)            DGX=true;                     shift   ;;
+        --official-hd-openpose) OFFICIAL_HD_OPENPOSE=true; shift ;;
         --config)         CONFIG="$2";                  shift 2 ;;
+        --reference-video) EXTRA_ARGS+=(--reference-video "$2"); shift 2 ;;
+        --reference-image) EXTRA_ARGS+=(--reference-image "$2"); shift 2 ;;
+        --reference-frames-dir) EXTRA_ARGS+=(--reference-frames-dir "$2"); shift 2 ;;
+        --allow-no-reference) EXTRA_ARGS+=(--allow-no-reference); shift ;;
+        --frames-dir)     EXTRA_ARGS+=(--frames-dir "$2"); shift 2 ;;
+        --output)         EXTRA_ARGS+=(--output "$2"); shift 2 ;;
         --no-sdxl)        EXTRA_ARGS+=(--no-sdxl);      shift   ;;
         --no-animatediff) EXTRA_ARGS+=(--no-animatediff); shift ;;
         --no-rife)        EXTRA_ARGS+=(--no-rife);      shift   ;;
@@ -112,6 +121,9 @@ print_banner() {
     echo -e "${BOLD}══════════════════════════════════════════════════════${NC}"
     if [[ "$BATCH" == "true" ]]; then
         echo -e "  Mode     : batch (all signs in outputs/pose_control/)"
+    elif [[ "$OFFICIAL_HD_OPENPOSE" == "true" ]]; then
+        echo -e "  Mode     : official HD OpenPose prototype"
+        echo -e "  Input    : outputs/avatar_from_video_hd/alsbt_ishara_2_pose/"
     else
         echo -e "  Sign     : $SIGN"
     fi
@@ -133,6 +145,13 @@ main() {
         python3 scripts/generate_photorealistic_avatar.py \
             --batch \
             --output-dir outputs/avatar_photorealistic \
+            "${EXTRA_ARGS[@]}"
+    elif [[ "$OFFICIAL_HD_OPENPOSE" == "true" ]]; then
+        log "Generating avatar from official HD OpenPose frames..."
+        python3 scripts/generate_photorealistic_avatar.py \
+            --official-hd-openpose \
+            --allow-no-reference \
+            --output-dir outputs/avatar_from_video_hd \
             "${EXTRA_ARGS[@]}"
     else
         log "Generating avatar for: $SIGN"

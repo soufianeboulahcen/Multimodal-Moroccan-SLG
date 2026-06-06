@@ -27,6 +27,11 @@ Usage
       --reference-video ".devcontainer/Dataset/mosl_videos_dataset_Pronouns/أَنْتِ.mp4" \\
       --output outputs/avatar_photorealistic/أَنْتِ_photorealistic.mp4
 
+  # Official HD OpenPose prototype input
+  python scripts/generate_photorealistic_avatar.py \\
+      --official-hd-openpose \\
+      --allow-no-reference
+
   # Batch — all signs with existing pose frames
   python scripts/generate_photorealistic_avatar.py --batch
 
@@ -49,6 +54,9 @@ import json
 import sys
 import time
 from pathlib import Path
+
+import numpy as np
+from PIL import Image
 
 # Ensure project root is on sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -98,6 +106,14 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Process all signs with existing pose frames in outputs/pose_control/",
     )
+    src.add_argument(
+        "--official-hd-openpose",
+        action="store_true",
+        help=(
+            "Use outputs/avatar_from_video_hd/alsbt_ishara_2_pose/pose_*.png "
+            "as the official HD ControlNet OpenPose conditioning input"
+        ),
+    )
 
     # ── Reference identity ───────────────────────────────────────────────────
     p.add_argument(
@@ -105,6 +121,23 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         metavar="MP4",
         help="MoSL dataset video for signer identity extraction",
+    )
+    p.add_argument(
+        "--reference-image",
+        type=Path,
+        metavar="PNG/JPG",
+        help="Single human source image for identity preservation",
+    )
+    p.add_argument(
+        "--reference-frames-dir",
+        type=Path,
+        metavar="DIR",
+        help="Directory of human source frames for identity preservation",
+    )
+    p.add_argument(
+        "--allow-no-reference",
+        action="store_true",
+        help="Continue without identity locking if no human source video is available",
     )
     p.add_argument(
         "--dataset-dir",
@@ -120,6 +153,12 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         metavar="MP4",
         help="Output MP4 path (single-sign mode)",
+    )
+    p.add_argument(
+        "--frames-dir",
+        type=Path,
+        metavar="DIR",
+        help="Directory for generated avatar PNG frames",
     )
     p.add_argument(
         "--output-dir",
@@ -169,6 +208,8 @@ def parse_args() -> argparse.Namespace:
     # ── Misc ─────────────────────────────────────────────────────────────────
     p.add_argument("--no-comparison", action="store_true",
                    help="Skip side-by-side comparison video")
+    p.add_argument("--no-frame-export", action="store_true",
+                   help="Skip generated avatar PNG frame export")
     p.add_argument("--quiet", action="store_true")
 
     return p.parse_args()
@@ -229,6 +270,19 @@ def build_config(args: argparse.Namespace) -> AvatarConfig:
     # Export overrides
     if args.no_comparison:
         cfg.export.export_comparison = False
+    if args.no_frame_export:
+        cfg.export.export_frames = False
+
+    # The HD OpenPose prototype should exercise the requested high-quality path:
+    # SDXL or better + ControlNet OpenPose + AnimateDiff as the primary backend.
+    if args.official_hd_openpose:
+        cfg.diffusion.use_sdxl = True
+        cfg.diffusion.use_animatediff = True
+        if args.resolution is None:
+            cfg.diffusion.resolution = 768
+        if args.num_inference_steps is None:
+            cfg.diffusion.num_inference_steps = 30
+        cfg.output_dir = str(args.output_dir)
 
     return cfg
 
@@ -287,6 +341,27 @@ def _find_reference_video(sign_name: str, dataset_dir: Path) -> Path | None:
     return None
 
 
+def _load_reference_frames(args: argparse.Namespace) -> list[np.ndarray] | None:
+    """Load optional human source frames for identity conditioning."""
+    if args.reference_image is not None:
+        if not args.reference_image.exists():
+            raise FileNotFoundError(f"Reference image not found: {args.reference_image}")
+        return [np.array(Image.open(args.reference_image).convert("RGB"))]
+
+    if args.reference_frames_dir is not None:
+        if not args.reference_frames_dir.exists():
+            raise FileNotFoundError(f"Reference frames dir not found: {args.reference_frames_dir}")
+        frames = []
+        for pattern in ("*.png", "*.jpg", "*.jpeg", "*.webp"):
+            for p in sorted(args.reference_frames_dir.glob(pattern)):
+                frames.append(np.array(Image.open(p).convert("RGB")))
+        if not frames:
+            raise FileNotFoundError(f"No reference frames found in {args.reference_frames_dir}")
+        return frames
+
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -294,8 +369,14 @@ def _find_reference_video(sign_name: str, dataset_dir: Path) -> Path | None:
 def main() -> int:
     args = parse_args()
 
-    if not args.batch and args.sign is None and args.pose_dir is None and args.skeleton_video is None:
-        print("Error: specify --sign, --pose-dir, --skeleton-video, or --batch")
+    if (
+        not args.batch
+        and args.sign is None
+        and args.pose_dir is None
+        and args.skeleton_video is None
+        and not args.official_hd_openpose
+    ):
+        print("Error: specify --sign, --pose-dir, --skeleton-video, --official-hd-openpose, or --batch")
         return 1
 
     cfg = build_config(args)
@@ -328,8 +409,6 @@ def main() -> int:
         return 0
 
     # ── Single-sign mode ─────────────────────────────────────────────────────
-    pipeline.load_models()
-
     if args.sign:
         # Auto-discover
         result = pipeline.run_sign(
@@ -339,31 +418,48 @@ def main() -> int:
         )
     else:
         # Explicit paths
-        pose_source = args.pose_dir or args.skeleton_video
+        if args.official_hd_openpose:
+            pose_source = Path("outputs/avatar_from_video_hd/alsbt_ishara_2_pose")
+            sign_name = "alsbt_ishara_2"
+            output_path = args.output or Path("outputs/avatar_from_video_hd/alsbt_ishara_2_avatar_photorealistic.mp4")
+            frames_dir = args.frames_dir or Path("outputs/avatar_from_video_hd/alsbt_ishara_2_avatar_frames")
+        else:
+            pose_source = args.pose_dir or args.skeleton_video
+            sign_name = pose_source.stem.replace("_keypoints", "").replace("_skeleton", "") if pose_source else ""
+            safe_name = sign_name.replace("/", "_").replace("\\", "_")[:60]
+            output_path = args.output or (args.output_dir / f"{safe_name}_photorealistic.mp4")
+            frames_dir = args.frames_dir
+
         if pose_source is None:
             print("Error: --pose-dir or --skeleton-video required.")
+            return 1
+        if not Path(pose_source).exists():
+            print(f"Error: pose source not found: {pose_source}")
             return 1
 
         reference_video = args.reference_video
         if reference_video is None:
-            sign_name = pose_source.stem.replace("_keypoints", "").replace("_skeleton", "")
             reference_video = _find_reference_video(sign_name, args.dataset_dir)
-            if reference_video is None:
+            if reference_video is None and not (args.allow_no_reference or args.official_hd_openpose):
                 print(
                     f"Error: --reference-video required (could not auto-discover "
                     f"for '{sign_name}' in {args.dataset_dir})"
                 )
                 return 1
 
-        sign_name = pose_source.stem.replace("_keypoints", "").replace("_skeleton", "")
-        safe_name = sign_name.replace("/", "_").replace("\\", "_")[:60]
-        output_path = args.output or (args.output_dir / f"{safe_name}_photorealistic.mp4")
+        try:
+            reference_frames = _load_reference_frames(args)
+        except FileNotFoundError as e:
+            print(f"Error: {e}")
+            return 1
 
         result = pipeline.run(
             pose_source=pose_source,
             reference_video=reference_video,
             output_path=output_path,
             sign_name=sign_name,
+            frames_dir=frames_dir,
+            reference_frames=reference_frames,
         )
 
     print(f"\n{result}")

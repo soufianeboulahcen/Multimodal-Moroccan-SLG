@@ -30,6 +30,7 @@ from avatar_video_generator.rendering.temporal_smoother import TemporalSmoother
 from avatar_video_generator.utils.video_io import (
     extract_reference_frames,
     make_comparison_video,
+    write_frames,
     write_video,
 )
 
@@ -121,20 +122,28 @@ class AvatarPipeline:
     def run(
         self,
         pose_source: str | Path,
-        reference_video: str | Path,
+        reference_video: str | Path | None,
         output_path: str | Path,
         sign_name: Optional[str] = None,
+        frames_dir: str | Path | None = None,
+        reference_frames: Optional[List[np.ndarray]] = None,
     ) -> "GenerationResult":
         """Generate a photorealistic avatar video for one sign.
 
         Args:
             pose_source: path to pose PNG directory or skeleton MP4.
                          Typically ``outputs/pose_control/<sign>_keypoints/``.
-            reference_video: path to the MoSL dataset video of the same sign.
+            reference_video: optional path to the MoSL dataset video of the same sign.
                              Used to extract the signer's face identity.
                              Typically ``.devcontainer/Dataset/.../أَنْتِ.mp4``.
+                             If omitted, the first prototype still runs with
+                             identity conditioning disabled.
             output_path: destination MP4 path.
             sign_name: optional sign label for logging and cache keys.
+            frames_dir: optional directory where generated avatar PNG frames
+                        are written. Defaults to ``<output_stem>_frames``.
+            reference_frames: optional pre-extracted RGB frames for InstantID /
+                              IP-Adapter style identity conditioning.
 
         Returns:
             GenerationResult with paths and timing information.
@@ -161,11 +170,20 @@ class AvatarPipeline:
         # ── Step 2: Extract signer identity ────────────────────────────
         t0 = time.time()
         logger.info("Step 2/6 — Extracting signer identity...")
-        ref_frames = extract_reference_frames(
-            reference_video,
-            n_frames=self.cfg.identity.multi_frame_count,
-            resize=(self.cfg.diffusion.resolution, self.cfg.diffusion.resolution),
-        )
+        if reference_frames is not None:
+            ref_frames = reference_frames
+        elif reference_video is not None and Path(reference_video).exists():
+            ref_frames = extract_reference_frames(
+                reference_video,
+                n_frames=self.cfg.identity.multi_frame_count,
+                resize=(self.cfg.diffusion.resolution, self.cfg.diffusion.resolution),
+            )
+        else:
+            ref_frames = []
+            logger.warning(
+                "  No source identity video provided; generating prototype "
+                "without InstantID/IP-Adapter identity locking."
+            )
         identity = self._identity_encoder.encode(
             ref_frames,
             cache_key=label,
@@ -205,9 +223,17 @@ class AvatarPipeline:
             output_fps = self.cfg.export.fps
             logger.info("Step 5/6 — RIFE interpolation skipped.")
 
-        # ── Step 6: Export MP4 ──────────────────────────────────────────
+        # ── Step 6: Export MP4 + generated frames ───────────────────────
         t0 = time.time()
         logger.info("Step 6/6 — Exporting MP4...")
+        frames_path: Optional[Path] = None
+        if self.cfg.export.export_frames:
+            frames_path = Path(frames_dir) if frames_dir is not None else (
+                out_path.parent / f"{out_path.stem}{self.cfg.export.frames_path_suffix}"
+            )
+            write_frames(final_frames, frames_path)
+            logger.info(f"  Avatar frames: {frames_path}")
+
         write_video(
             final_frames,
             out_path,
@@ -237,6 +263,7 @@ class AvatarPipeline:
 
         return GenerationResult(
             output_path=out_path,
+            frames_dir=frames_path,
             comparison_path=comparison_path,
             n_pose_frames=len(pose_images),
             n_output_frames=len(final_frames),
@@ -376,6 +403,7 @@ class GenerationResult:
     def __init__(
         self,
         output_path: Path,
+        frames_dir: Optional[Path],
         comparison_path: Optional[Path],
         n_pose_frames: int,
         n_output_frames: int,
@@ -385,6 +413,7 @@ class GenerationResult:
         renderer_backend: str,
     ) -> None:
         self.output_path = output_path
+        self.frames_dir = frames_dir
         self.comparison_path = comparison_path
         self.n_pose_frames = n_pose_frames
         self.n_output_frames = n_output_frames
@@ -397,6 +426,7 @@ class GenerationResult:
         return (
             f"GenerationResult(\n"
             f"  output={self.output_path}\n"
+            f"  frames_dir={self.frames_dir}\n"
             f"  frames={self.n_pose_frames} → {self.n_output_frames} @ {self.output_fps:.0f}fps\n"
             f"  identity={self.identity_backend}  renderer={self.renderer_backend}\n"
             f"  elapsed={self.elapsed_seconds:.1f}s\n"
@@ -406,6 +436,7 @@ class GenerationResult:
     def to_dict(self) -> dict:
         return {
             "output_path": str(self.output_path),
+            "frames_dir": str(self.frames_dir) if self.frames_dir else None,
             "comparison_path": str(self.comparison_path) if self.comparison_path else None,
             "n_pose_frames": self.n_pose_frames,
             "n_output_frames": self.n_output_frames,

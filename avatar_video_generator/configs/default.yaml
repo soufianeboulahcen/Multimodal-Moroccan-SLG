@@ -66,5 +66,7 @@ export:
   codec: "libx264"
   crf: 18
   pixel_format: "yuv420p"
+  export_frames: true
+  frames_path_suffix: "_frames"
   export_comparison: true
   comparison_path_suffix: "_comparison"

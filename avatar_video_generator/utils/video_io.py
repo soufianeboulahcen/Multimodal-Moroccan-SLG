@@ -10,6 +10,7 @@ from typing import List, Optional, Tuple
 
 import cv2
 import numpy as np
+from PIL import Image
 
 
 # ---------------------------------------------------------------------------
@@ -167,6 +168,31 @@ def write_video(
         size_mb = out.stat().st_size / 1e6
         print(f"  Saved: {out}  ({len(frames)} frames @ {fps:.0f} fps, {size_mb:.1f} MB)")
 
+    return out
+
+
+def write_frames(
+    frames: List[np.ndarray],
+    output_dir: str | Path,
+    pattern: str = "avatar_{:06d}.png",
+) -> Path:
+    """Write RGB avatar frames as PNG files.
+
+    Args:
+        frames: list of (H, W, 3) uint8 RGB arrays.
+        output_dir: destination directory.
+        pattern: filename pattern containing one integer replacement field.
+
+    Returns:
+        Path to the directory containing the generated frames.
+    """
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    if not frames:
+        raise ValueError("No frames to write.")
+
+    for i, frame in enumerate(frames):
+        Image.fromarray(frame).save(out / pattern.format(i))
     return out
 
 
