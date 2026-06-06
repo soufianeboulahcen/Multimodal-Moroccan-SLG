@@ -242,6 +242,12 @@ def write_frames(
         raise ValueError("No frames to write.")
 
     repaired = repair_frame_sequence(frames)
+    for old_frame in out.glob("*.png"):
+        old_frame.unlink()
+    for old_frame in out.glob("*.jpg"):
+        old_frame.unlink()
+    for old_frame in out.glob("*.jpeg"):
+        old_frame.unlink()
     for i, frame in enumerate(repaired):
         frame_path = out / pattern.format(i)
         frame_path = ensure_ascii_media_path(frame_path, default_stem=f"avatar_{i:06d}")

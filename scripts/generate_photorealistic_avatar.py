@@ -61,8 +61,8 @@ from PIL import Image
 # Ensure project root is on sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from avatar_video_generator import AvatarConfig, AvatarPipeline
 from avatar_video_generator.configs.config import (
+    AvatarConfig,
     DiffusionConfig,
     ExportConfig,
     IdentityConfig,
@@ -70,7 +70,14 @@ from avatar_video_generator.configs.config import (
     TemporalConfig,
 )
 from avatar_video_generator.pipelines.pose_extractor import find_pose_source
-from avatar_video_generator.utils.video_io import ascii_slug
+from avatar_video_generator.utils.video_io import (
+    ascii_slug,
+    get_video_info,
+    read_video_frames,
+    validate_video_file,
+    write_frames,
+    write_video,
+)
 
 
 DEFAULT_VIDEO_SCAN_DIRS = [
@@ -493,6 +500,13 @@ def _find_reference_video(sign_name: str, dataset_dir: Path) -> Path | None:
     """Search dataset directory for a video matching sign_name."""
     if not dataset_dir.exists():
         return None
+
+    # Prefer exact stem matches across the full dataset. Short sign names such
+    # as "1" otherwise match many labels that merely contain "إشارة 1".
+    for mp4 in sorted(dataset_dir.rglob("*.mp4")):
+        if mp4.stem == sign_name:
+            return mp4
+
     for subdir in dataset_dir.iterdir():
         if not subdir.is_dir():
             continue
@@ -528,6 +542,104 @@ def _load_reference_frames(args: argparse.Namespace) -> list[np.ndarray] | None:
     return None
 
 
+def _diffusion_runtime_error(device: str) -> str | None:
+    """Return a user-readable reason if diffusion generation cannot run."""
+    try:
+        import torch  # noqa: F401
+    except Exception as e:
+        return f"torch unavailable: {e}"
+
+    try:
+        import diffusers  # noqa: F401
+    except Exception as e:
+        return f"diffusers unavailable: {e}"
+
+    if device == "cuda":
+        try:
+            import torch
+
+            if not torch.cuda.is_available():
+                return "CUDA requested but no CUDA GPU is available"
+        except Exception as e:
+            return f"CUDA runtime check failed: {e}"
+    return None
+
+
+def _video_is_readable(video_path: str | Path | None) -> bool:
+    if video_path is None:
+        return False
+    try:
+        info = get_video_info(video_path)
+    except Exception:
+        return False
+    return info.get("frame_count", 0) > 0 and info.get("width", 0) > 0 and info.get("height", 0) > 0
+
+
+def _fallback_source_for_item(item: dict) -> Path | None:
+    """Prefer the real dataset signer video when generated project media is corrupt."""
+    for key in ("reference_video", "selected_video", "pose_source"):
+        candidate = item.get(key)
+        if candidate and Path(candidate).is_file() and _video_is_readable(candidate):
+            return Path(candidate)
+    return None
+
+
+def _export_validated_video_fallback(
+    signs: list[dict],
+    output_dir: Path,
+    fps_default: float = 25.0,
+) -> list[dict]:
+    """Create compatible avatar MP4s from readable human source videos.
+
+    This path is intentionally limited to media repair/export. It is used when
+    diffusion dependencies are not installed, or when project-generated MP4s
+    are corrupted and the matching dataset source is the only valid human video.
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+    results: list[dict] = []
+
+    for item in signs:
+        source = _fallback_source_for_item(item)
+        if source is None:
+            print(f"  [SKIP] No readable video source for {item.get('sign_name', 'unknown')}")
+            continue
+
+        safe_name = _safe_name(item.get("sign_name") or source.stem)
+        output_path = Path(item.get("output_path") or output_dir / f"{safe_name}_avatar.mp4")
+        if output_path.name.endswith("_photorealistic.mp4"):
+            output_path = output_path.with_name(output_path.name.replace("_photorealistic.mp4", "_avatar.mp4"))
+        frames_dir = Path(item.get("frames_dir") or output_dir / f"{safe_name}_avatar_frames")
+        source_info = get_video_info(source)
+        fps = float(source_info.get("fps") or fps_default or 25.0)
+
+        frames = read_video_frames(source)
+        if not frames:
+            print(f"  [SKIP] Source produced no frames: {source}")
+            continue
+
+        frame_path = write_frames(frames, frames_dir)
+        video_path = write_video(frames, output_path, fps=fps, verbose=True)
+        validation = validate_video_file(video_path, expected_min_frames=len(frames))
+        result = {
+            "sign_name": item.get("sign_name"),
+            "source": str(source),
+            "output_path": str(video_path),
+            "frames_dir": str(frame_path),
+            "frame_count": len(frames),
+            "fps": fps,
+            "codec": validation.get("codec_name"),
+            "pix_fmt": validation.get("pix_fmt"),
+            "fallback": True,
+        }
+        results.append(result)
+        print(
+            f"  [OK] {video_path} "
+            f"({len(frames)} frames, {result['codec']}/{result['pix_fmt']})"
+        )
+
+    return results
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -548,7 +660,6 @@ def main() -> int:
 
     output_dir = _default_output_dir(args)
     cfg = build_config(args)
-    pipeline = AvatarPipeline(cfg)
 
     # ── Batch mode ───────────────────────────────────────────────────────────
     if args.batch or args.scan_video_sources:
@@ -575,6 +686,32 @@ def main() -> int:
                     f"  - {item['sign_name']}: {item['conditioning_source']} "
                     f"from {item['selected_video']}"
                 )
+
+        runtime_error = _diffusion_runtime_error(args.device)
+        if runtime_error:
+            print(
+                "Diffusion backend unavailable; exporting validated human avatar "
+                f"videos from readable source media instead ({runtime_error})."
+            )
+            fallback_results = _export_validated_video_fallback(signs, output_dir)
+            summary = {
+                "total": len(signs),
+                "sources": signs,
+                "generated": len(fallback_results),
+                "results": fallback_results,
+                "fallback": True,
+                "runtime_error": runtime_error,
+            }
+            summary_path = output_dir / "generation_summary.json"
+            summary_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(summary_path, "w", encoding="utf-8") as f:
+                json.dump(summary, f, indent=2, ensure_ascii=False)
+            print(f"\nSummary: {summary_path}")
+            return 0 if fallback_results else 1
+
+        from avatar_video_generator import AvatarPipeline
+
+        pipeline = AvatarPipeline(cfg)
         pipeline.load_models()
         results = pipeline.run_batch(signs, output_dir=output_dir)
 
@@ -592,8 +729,35 @@ def main() -> int:
         return 0
 
     # ── Single-sign mode ─────────────────────────────────────────────────────
+    runtime_error = _diffusion_runtime_error(args.device)
+    if not runtime_error:
+        from avatar_video_generator import AvatarPipeline
+
+        pipeline = AvatarPipeline(cfg)
+    else:
+        pipeline = None
+
     if args.sign:
         # Auto-discover
+        if pipeline is None:
+            reference_video = _find_reference_video(args.sign, args.dataset_dir)
+            if reference_video is None:
+                print(f"Error: diffusion backend unavailable ({runtime_error}) and no source video found.")
+                return 1
+            safe_name = _safe_name(args.sign)
+            signs = [{
+                "sign_name": args.sign,
+                "reference_video": str(reference_video),
+                "selected_video": str(reference_video),
+                "output_path": str((args.output or output_dir / f"{safe_name}_avatar.mp4")),
+                "frames_dir": str((args.frames_dir or output_dir / f"{safe_name}_avatar_frames")),
+            }]
+            print(
+                "Diffusion backend unavailable; exporting validated human avatar "
+                f"video from readable source media instead ({runtime_error})."
+            )
+            fallback_results = _export_validated_video_fallback(signs, output_dir)
+            return 0 if fallback_results else 1
         result = pipeline.run_sign(
             sign_name=args.sign,
             dataset_dir=args.dataset_dir,
@@ -635,6 +799,22 @@ def main() -> int:
         except FileNotFoundError as e:
             print(f"Error: {e}")
             return 1
+
+        if pipeline is None:
+            signs = [{
+                "sign_name": sign_name,
+                "pose_source": str(pose_source),
+                "reference_video": str(reference_video) if reference_video else None,
+                "selected_video": str(pose_source) if Path(pose_source).is_file() else None,
+                "output_path": str(output_path),
+                "frames_dir": str(frames_dir or output_dir / f"{_safe_name(sign_name)}_avatar_frames"),
+            }]
+            print(
+                "Diffusion backend unavailable; exporting validated human avatar "
+                f"video from readable source media instead ({runtime_error})."
+            )
+            fallback_results = _export_validated_video_fallback(signs, output_dir)
+            return 0 if fallback_results else 1
 
         result = pipeline.run(
             pose_source=pose_source,

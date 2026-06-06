@@ -38,8 +38,18 @@ Public API
         output_path="outputs/avatar/أَنْتِ_photorealistic.mp4",
     )
 """
-from avatar_video_generator.pipelines.avatar_pipeline import AvatarPipeline
-from avatar_video_generator.configs.config import AvatarConfig
-
 __all__ = ["AvatarPipeline", "AvatarConfig"]
 __version__ = "1.0.0"
+
+
+def __getattr__(name: str):
+    """Load heavy pipeline modules only when the public API is requested."""
+    if name == "AvatarConfig":
+        from avatar_video_generator.configs.config import AvatarConfig
+
+        return AvatarConfig
+    if name == "AvatarPipeline":
+        from avatar_video_generator.pipelines.avatar_pipeline import AvatarPipeline
+
+        return AvatarPipeline
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
