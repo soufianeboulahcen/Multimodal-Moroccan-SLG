@@ -72,6 +72,21 @@ from avatar_video_generator.configs.config import (
 from avatar_video_generator.pipelines.pose_extractor import find_pose_source
 
 
+DEFAULT_VIDEO_SCAN_DIRS = [
+    Path("outputs/videos/mosaic"),
+    Path("outputs/videos"),
+]
+VIDEO_SUFFIXES = (
+    "_mosaic",
+    "_studio",
+    "_neon",
+    "_overlay",
+    "_skeleton",
+    "_slowmo",
+    "_heatmap",
+)
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -105,6 +120,14 @@ def parse_args() -> argparse.Namespace:
         "--batch",
         action="store_true",
         help="Process all signs with existing pose frames in outputs/pose_control/",
+    )
+    src.add_argument(
+        "--scan-video-sources",
+        action="store_true",
+        help=(
+            "Scan outputs/videos/mosaic and outputs/videos, select best samples, "
+            "and generate photorealistic avatars under avatar_video_generator/outputs"
+        ),
     )
     src.add_argument(
         "--official-hd-openpose",
@@ -163,9 +186,22 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--output-dir",
         type=Path,
-        default=Path("outputs/avatar_photorealistic"),
+        default=None,
         metavar="DIR",
         help="Output directory (batch mode)",
+    )
+    p.add_argument(
+        "--video-source-dir",
+        type=Path,
+        action="append",
+        metavar="DIR",
+        help="Additional video source directory to scan; can be repeated",
+    )
+    p.add_argument(
+        "--max-samples",
+        type=int,
+        default=None,
+        help="Maximum selected video samples to render after prioritisation",
     )
 
     # ── Config ───────────────────────────────────────────────────────────────
@@ -234,7 +270,7 @@ def build_config(args: argparse.Namespace) -> AvatarConfig:
     # Apply CLI overrides
     cfg.device = args.device
     cfg.verbose = not args.quiet
-    cfg.output_dir = str(args.output_dir)
+    cfg.output_dir = str(_default_output_dir(args))
 
     # Diffusion overrides
     if args.resolution is not None:
@@ -282,7 +318,7 @@ def build_config(args: argparse.Namespace) -> AvatarConfig:
             cfg.diffusion.resolution = 768
         if args.num_inference_steps is None:
             cfg.diffusion.num_inference_steps = 30
-        cfg.output_dir = str(args.output_dir)
+        cfg.output_dir = str(_default_output_dir(args))
 
     return cfg
 
@@ -321,6 +357,135 @@ def discover_batch_signs(
         })
 
     return signs
+
+
+def discover_video_avatar_sources(
+    scan_dirs: list[Path],
+    dataset_dir: Path,
+    output_dir: Path,
+    max_samples: int | None = None,
+) -> list[dict]:
+    """Select best available video samples for avatar rendering.
+
+    Priority:
+      1. outputs/videos/mosaic/*
+      2. demo/*/*_mosaic.mp4
+      3. studio/neon/overlay/skeleton/slowmo/heatmap fallbacks
+
+    If an existing OpenPose conditioning directory is available in
+    outputs/pose_control/<sign>_keypoints, it is used instead of extracting
+    conditioning from the selected MP4.
+    """
+    candidates: dict[str, dict] = {}
+    seen_paths: set[Path] = set()
+
+    for scan_dir in scan_dirs:
+        if not scan_dir.exists():
+            continue
+        for video_path in sorted(scan_dir.rglob("*.mp4")):
+            video_path = video_path.resolve()
+            if video_path in seen_paths:
+                continue
+            seen_paths.add(video_path)
+
+            sign_name = _sign_name_from_video(video_path)
+            score = _video_priority(video_path)
+            existing = candidates.get(sign_name)
+            if existing is not None and existing["priority"] <= score:
+                continue
+
+            pose_source = _existing_pose_source(sign_name) or video_path
+            safe_name = _safe_name(sign_name)
+            reference_video = _find_reference_video(sign_name, dataset_dir)
+            candidates[sign_name] = {
+                "sign_name": sign_name,
+                "pose_source": str(pose_source),
+                "selected_video": str(video_path),
+                "reference_video": str(reference_video) if reference_video else None,
+                "output_path": str(output_dir / f"{safe_name}_photorealistic.mp4"),
+                "frames_dir": str(output_dir / f"{safe_name}_frames"),
+                "priority": score,
+                "conditioning_source": "existing_openpose" if Path(pose_source).is_dir() else "selected_video",
+            }
+
+    selected = sorted(
+        candidates.values(),
+        key=lambda item: (item["priority"], item["sign_name"]),
+    )
+    if max_samples is not None:
+        selected = selected[:max_samples]
+    return selected
+
+
+def _default_output_dir(args: argparse.Namespace) -> Path:
+    if args.output_dir is not None:
+        return args.output_dir
+    if getattr(args, "scan_video_sources", False):
+        return Path("avatar_video_generator/outputs")
+    return Path("outputs/avatar_photorealistic")
+
+
+def _scan_dirs(args: argparse.Namespace) -> list[Path]:
+    dirs = list(DEFAULT_VIDEO_SCAN_DIRS)
+    if args.video_source_dir:
+        dirs.extend(args.video_source_dir)
+    # Deduplicate while preserving priority order.
+    out: list[Path] = []
+    seen: set[Path] = set()
+    for d in dirs:
+        key = d.resolve() if d.exists() else d
+        if key not in seen:
+            out.append(d)
+            seen.add(key)
+    return out
+
+
+def _sign_name_from_video(video_path: Path) -> str:
+    stem = video_path.stem
+    for suffix in VIDEO_SUFFIXES:
+        if stem.endswith(suffix):
+            return stem[:-len(suffix)]
+    return stem
+
+
+def _video_priority(video_path: Path) -> int:
+    parts = set(video_path.parts)
+    stem = video_path.stem
+    if "mosaic" in parts:
+        return 0
+    if stem.endswith("_mosaic"):
+        return 1
+    if "studio" in parts or stem.endswith("_studio"):
+        return 2
+    if "neon" in parts or stem.endswith("_neon"):
+        return 3
+    if "overlay" in parts or stem.endswith("_overlay"):
+        return 4
+    if "skeleton" in parts or stem.endswith("_skeleton"):
+        return 5
+    if "slowmo" in parts or stem.endswith("_slowmo"):
+        return 6
+    if "heatmap" in parts or stem.endswith("_heatmap"):
+        return 7
+    return 8
+
+
+def _existing_pose_source(sign_name: str) -> Path | None:
+    direct = Path("outputs/pose_control") / f"{sign_name}_keypoints"
+    if direct.exists() and list(direct.glob("*.png")):
+        return direct
+
+    pose_root = Path("outputs/pose_control")
+    if not pose_root.exists():
+        return None
+    for d in sorted(pose_root.iterdir()):
+        if d.is_dir() and d.name.replace("_keypoints", "") == sign_name and list(d.glob("*.png")):
+            return d
+    return None
+
+
+def _safe_name(sign_name: str) -> str:
+    return sign_name.replace("/", "_").replace("\\", "_")[:80]
 
 
 def _find_reference_video(sign_name: str, dataset_dir: Path) -> Path | None:
@@ -371,6 +536,7 @@ def main() -> int:
 
     if (
         not args.batch
+        and not args.scan_video_sources
         and args.sign is None
         and args.pose_dir is None
         and args.skeleton_video is None
@@ -379,29 +545,45 @@ def main() -> int:
         print("Error: specify --sign, --pose-dir, --skeleton-video, --official-hd-openpose, or --batch")
         return 1
 
+    output_dir = _default_output_dir(args)
     cfg = build_config(args)
     pipeline = AvatarPipeline(cfg)
 
     # ── Batch mode ───────────────────────────────────────────────────────────
-    if args.batch:
-        signs = discover_batch_signs(
-            Path("outputs/pose_control"),
-            args.dataset_dir,
-        )
+    if args.batch or args.scan_video_sources:
+        if args.scan_video_sources:
+            signs = discover_video_avatar_sources(
+                _scan_dirs(args),
+                args.dataset_dir,
+                output_dir,
+                max_samples=args.max_samples,
+            )
+        else:
+            signs = discover_batch_signs(
+                Path("outputs/pose_control"),
+                args.dataset_dir,
+            )
         if not signs:
-            print("No signs found. Run the SignLLM pipeline first.")
+            print("No renderable avatar sources found.")
             return 1
 
-        print(f"Batch: {len(signs)} sign(s) to generate")
+        print(f"Batch: {len(signs)} source(s) to generate")
+        if args.scan_video_sources:
+            for item in signs:
+                print(
+                    f"  - {item['sign_name']}: {item['conditioning_source']} "
+                    f"from {item['selected_video']}"
+                )
         pipeline.load_models()
-        results = pipeline.run_batch(signs, output_dir=args.output_dir)
+        results = pipeline.run_batch(signs, output_dir=output_dir)
 
         summary = {
             "total": len(signs),
+            "sources": signs,
             "generated": len(results),
             "results": [r.to_dict() for r in results],
         }
-        summary_path = args.output_dir / "generation_summary.json"
+        summary_path = output_dir / "generation_summary.json"
         summary_path.parent.mkdir(parents=True, exist_ok=True)
         with open(summary_path, "w", encoding="utf-8") as f:
             json.dump(summary, f, indent=2, ensure_ascii=False)
@@ -427,7 +609,7 @@ def main() -> int:
             pose_source = args.pose_dir or args.skeleton_video
             sign_name = pose_source.stem.replace("_keypoints", "").replace("_skeleton", "") if pose_source else ""
             safe_name = sign_name.replace("/", "_").replace("\\", "_")[:60]
-            output_path = args.output or (args.output_dir / f"{safe_name}_photorealistic.mp4")
+            output_path = args.output or (output_dir / f"{safe_name}_photorealistic.mp4")
             frames_dir = args.frames_dir
 
         if pose_source is None:

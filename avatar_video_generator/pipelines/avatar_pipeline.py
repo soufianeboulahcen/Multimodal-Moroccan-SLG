@@ -306,7 +306,8 @@ class AvatarPipeline:
         for i, sign in enumerate(signs):
             sign_name = sign.get("sign_name") or Path(sign["pose_source"]).stem
             safe_name = sign_name.replace("/", "_").replace("\\", "_")[:60]
-            out_path = out_dir / f"{safe_name}_photorealistic.mp4"
+            out_path = Path(sign.get("output_path") or (out_dir / f"{safe_name}_photorealistic.mp4"))
+            frames_dir = sign.get("frames_dir")
 
             logger.info(f"\n[{i+1}/{n}] {sign_name}")
 
@@ -317,9 +318,10 @@ class AvatarPipeline:
             try:
                 result = self.run(
                     pose_source=sign["pose_source"],
-                    reference_video=sign["reference_video"],
+                    reference_video=sign.get("reference_video"),
                     output_path=out_path,
                     sign_name=sign_name,
+                    frames_dir=frames_dir,
                 )
                 results.append(result)
             except Exception as e:

@@ -11,6 +11,7 @@
 #   bash run_avatar_photorealistic.sh                        # single sign (أَنْتِ)
 #   bash run_avatar_photorealistic.sh --sign أَنْتِ           # explicit sign
 #   bash run_avatar_photorealistic.sh --batch                # all signs
+#   bash run_avatar_photorealistic.sh --scan-video-sources   # outputs/videos priority batch
 #   bash run_avatar_photorealistic.sh --dgx                  # DGX high-quality
 #   bash run_avatar_photorealistic.sh --official-hd-openpose # HD OpenPose prototype
 #   bash run_avatar_photorealistic.sh --no-sdxl              # SD1.5 fallback
@@ -30,6 +31,7 @@ cd "$REPO_ROOT"
 # ── Defaults ──────────────────────────────────────────────────────────────────
 SIGN="أَنْتِ"
 BATCH=false
+SCAN_VIDEO_SOURCES=false
 DGX=false
 OFFICIAL_HD_OPENPOSE=false
 CONFIG=""
@@ -40,9 +42,12 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --sign)           SIGN="$2";                    shift 2 ;;
         --batch)          BATCH=true;                   shift   ;;
+        --scan-video-sources) SCAN_VIDEO_SOURCES=true;  shift   ;;
         --dgx)            DGX=true;                     shift   ;;
         --official-hd-openpose) OFFICIAL_HD_OPENPOSE=true; shift ;;
         --config)         CONFIG="$2";                  shift 2 ;;
+        --video-source-dir) EXTRA_ARGS+=(--video-source-dir "$2"); shift 2 ;;
+        --max-samples)    EXTRA_ARGS+=(--max-samples "$2"); shift 2 ;;
         --reference-video) EXTRA_ARGS+=(--reference-video "$2"); shift 2 ;;
         --reference-image) EXTRA_ARGS+=(--reference-image "$2"); shift 2 ;;
         --reference-frames-dir) EXTRA_ARGS+=(--reference-frames-dir "$2"); shift 2 ;;
@@ -88,6 +93,14 @@ check_gpu() {
 # ── Dependency check ──────────────────────────────────────────────────────────
 check_deps() {
     log "Checking dependencies..."
+    if ! command -v python3 &>/dev/null; then
+        echo "python3 not found. Run this command in the project ML/Docker environment with requirements_avatar.txt installed." >&2
+        exit 1
+    fi
+    if ! command -v pip &>/dev/null && ! command -v pip3 &>/dev/null; then
+        echo "pip not found. Install Python packaging support before running avatar inference." >&2
+        exit 1
+    fi
     if ! python3 -c "import diffusers" 2>/dev/null; then
         warn "diffusers not installed. Installing requirements_avatar.txt..."
         pip install -r requirements_avatar.txt -q
@@ -121,6 +134,10 @@ print_banner() {
     echo -e "${BOLD}══════════════════════════════════════════════════════${NC}"
     if [[ "$BATCH" == "true" ]]; then
         echo -e "  Mode     : batch (all signs in outputs/pose_control/)"
+    elif [[ "$SCAN_VIDEO_SOURCES" == "true" ]]; then
+        echo -e "  Mode     : scan generated videos"
+        echo -e "  Priority : outputs/videos/mosaic/"
+        echo -e "  Output   : avatar_video_generator/outputs/"
     elif [[ "$OFFICIAL_HD_OPENPOSE" == "true" ]]; then
         echo -e "  Mode     : official HD OpenPose prototype"
         echo -e "  Input    : outputs/avatar_from_video_hd/alsbt_ishara_2_pose/"
@@ -128,7 +145,13 @@ print_banner() {
         echo -e "  Sign     : $SIGN"
     fi
     echo -e "  DGX mode : $DGX"
-    echo -e "  Output   : outputs/avatar_photorealistic/"
+    if [[ "$SCAN_VIDEO_SOURCES" == "true" ]]; then
+        echo -e "  Output   : avatar_video_generator/outputs/"
+    elif [[ "$OFFICIAL_HD_OPENPOSE" == "true" ]]; then
+        echo -e "  Output   : outputs/avatar_from_video_hd/"
+    else
+        echo -e "  Output   : outputs/avatar_photorealistic/"
+    fi
     echo -e "${BOLD}══════════════════════════════════════════════════════${NC}"
     echo ""
 }
@@ -145,6 +168,13 @@ main() {
         python3 scripts/generate_photorealistic_avatar.py \
             --batch \
             --output-dir outputs/avatar_photorealistic \
+            "${EXTRA_ARGS[@]}"
+    elif [[ "$SCAN_VIDEO_SOURCES" == "true" ]]; then
+        log "Scanning generated videos and rendering photorealistic avatars..."
+        python3 scripts/generate_photorealistic_avatar.py \
+            --scan-video-sources \
+            --allow-no-reference \
+            --output-dir avatar_video_generator/outputs \
             "${EXTRA_ARGS[@]}"
     elif [[ "$OFFICIAL_HD_OPENPOSE" == "true" ]]; then
         log "Generating avatar from official HD OpenPose frames..."
@@ -163,8 +193,16 @@ main() {
 
     echo ""
     ok "Generation complete!"
-    echo -e "  Output: ${BOLD}outputs/avatar_photorealistic/${NC}"
-    ls -lh outputs/avatar_photorealistic/*.mp4 2>/dev/null || true
+    if [[ "$SCAN_VIDEO_SOURCES" == "true" ]]; then
+        echo -e "  Output: ${BOLD}avatar_video_generator/outputs/${NC}"
+        ls -lh avatar_video_generator/outputs/*.mp4 2>/dev/null || true
+    elif [[ "$OFFICIAL_HD_OPENPOSE" == "true" ]]; then
+        echo -e "  Output: ${BOLD}outputs/avatar_from_video_hd/${NC}"
+        ls -lh outputs/avatar_from_video_hd/*.mp4 2>/dev/null || true
+    else
+        echo -e "  Output: ${BOLD}outputs/avatar_photorealistic/${NC}"
+        ls -lh outputs/avatar_photorealistic/*.mp4 2>/dev/null || true
+    fi
 }
 
 main "$@"
