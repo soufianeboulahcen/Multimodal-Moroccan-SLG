@@ -1,0 +1,31 @@
+{
+  "total": 1,
+  "sources": [
+    {
+      "sign_name": "1",
+      "pose_source": "/workspaces/Multimodal-Moroccan-SLG/outputs/videos/mosaic/1_mosaic.mp4",
+      "selected_video": "/workspaces/Multimodal-Moroccan-SLG/outputs/videos/mosaic/1_mosaic.mp4",
+      "reference_video": ".devcontainer/Dataset/mosl_videos_dataset_Numbers/1.mp4",
+      "output_path": "avatar_video_generator/outputs/1_photorealistic.mp4",
+      "frames_dir": "avatar_video_generator/outputs/1_frames",
+      "priority": 0,
+      "conditioning_source": "selected_video"
+    }
+  ],
+  "generated": 1,
+  "results": [
+    {
+      "sign_name": "1",
+      "source": ".devcontainer/Dataset/mosl_videos_dataset_Numbers/1.mp4",
+      "output_path": "avatar_video_generator/outputs/1_avatar.mp4",
+      "frames_dir": "avatar_video_generator/outputs/1_frames",
+      "frame_count": 52,
+      "fps": 25.0,
+      "codec": "h264",
+      "pix_fmt": "yuv420p",
+      "fallback": true
+    }
+  ],
+  "fallback": true,
+  "runtime_error": "torch unavailable: No module named 'torch'"
+}
