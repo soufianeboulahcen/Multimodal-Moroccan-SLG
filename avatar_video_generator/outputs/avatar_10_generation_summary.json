@@ -12,8 +12,9 @@
     "codec": "h264",
     "pix_fmt": "yuv420p",
     "background": "studio",
-    "appearance": "dark navy/black tailored business suit, white dress shirt, professional studio presenter style",
-    "avatarization": "background replacement, formal suit rendering, face anonymization, lighting shift, camera reframing",
+    "appearance": "solid black plain t-shirt, uniform continuous fabric, no logos, no seams, no stripes",
+    "negative_prompt": "vertical stripe, center stripe, white stripe, white band, zipper, necktie, clothing seam, color split, clothing artifact, texture artifact, logo, printed design, unrealistic shirt, duplicated fabric, warped clothing, diffusion artifact",
+    "avatarization": "background replacement, plain black shirt rendering, face anonymization, lighting shift, camera reframing",
     "note": "CPU avatarized motion-transfer fallback; not a raw dataset copy."
   },
   {
@@ -29,8 +30,9 @@
     "codec": "h264",
     "pix_fmt": "yuv420p",
     "background": "office",
-    "appearance": "dark navy/black tailored business suit, white dress shirt, professional studio presenter style",
-    "avatarization": "background replacement, formal suit rendering, face anonymization, lighting shift, camera reframing",
+    "appearance": "solid black plain t-shirt, uniform continuous fabric, no logos, no seams, no stripes",
+    "negative_prompt": "vertical stripe, center stripe, white stripe, white band, zipper, necktie, clothing seam, color split, clothing artifact, texture artifact, logo, printed design, unrealistic shirt, duplicated fabric, warped clothing, diffusion artifact",
+    "avatarization": "background replacement, plain black shirt rendering, face anonymization, lighting shift, camera reframing",
     "note": "CPU avatarized motion-transfer fallback; not a raw dataset copy."
   },
   {
@@ -46,8 +48,9 @@
     "codec": "h264",
     "pix_fmt": "yuv420p",
     "background": "classroom",
-    "appearance": "dark navy/black tailored business suit, white dress shirt, professional studio presenter style",
-    "avatarization": "background replacement, formal suit rendering, face anonymization, lighting shift, camera reframing",
+    "appearance": "solid black plain t-shirt, uniform continuous fabric, no logos, no seams, no stripes",
+    "negative_prompt": "vertical stripe, center stripe, white stripe, white band, zipper, necktie, clothing seam, color split, clothing artifact, texture artifact, logo, printed design, unrealistic shirt, duplicated fabric, warped clothing, diffusion artifact",
+    "avatarization": "background replacement, plain black shirt rendering, face anonymization, lighting shift, camera reframing",
     "note": "CPU avatarized motion-transfer fallback; not a raw dataset copy."
   },
   {
@@ -63,8 +66,9 @@
     "codec": "h264",
     "pix_fmt": "yuv420p",
     "background": "warm_indoor",
-    "appearance": "dark navy/black tailored business suit, white dress shirt, professional studio presenter style",
-    "avatarization": "background replacement, formal suit rendering, face anonymization, lighting shift, camera reframing",
+    "appearance": "solid black plain t-shirt, uniform continuous fabric, no logos, no seams, no stripes",
+    "negative_prompt": "vertical stripe, center stripe, white stripe, white band, zipper, necktie, clothing seam, color split, clothing artifact, texture artifact, logo, printed design, unrealistic shirt, duplicated fabric, warped clothing, diffusion artifact",
+    "avatarization": "background replacement, plain black shirt rendering, face anonymization, lighting shift, camera reframing",
     "note": "CPU avatarized motion-transfer fallback; not a raw dataset copy."
   },
   {
@@ -80,8 +84,9 @@
     "codec": "h264",
     "pix_fmt": "yuv420p",
     "background": "neutral_gradient",
-    "appearance": "dark navy/black tailored business suit, white dress shirt, professional studio presenter style",
-    "avatarization": "background replacement, formal suit rendering, face anonymization, lighting shift, camera reframing",
+    "appearance": "solid black plain t-shirt, uniform continuous fabric, no logos, no seams, no stripes",
+    "negative_prompt": "vertical stripe, center stripe, white stripe, white band, zipper, necktie, clothing seam, color split, clothing artifact, texture artifact, logo, printed design, unrealistic shirt, duplicated fabric, warped clothing, diffusion artifact",
+    "avatarization": "background replacement, plain black shirt rendering, face anonymization, lighting shift, camera reframing",
     "note": "CPU avatarized motion-transfer fallback; not a raw dataset copy."
   },
   {
@@ -97,8 +102,9 @@
     "codec": "h264",
     "pix_fmt": "yuv420p",
     "background": "soft_studio",
-    "appearance": "dark navy/black tailored business suit, white dress shirt, professional studio presenter style",
-    "avatarization": "background replacement, formal suit rendering, face anonymization, lighting shift, camera reframing",
+    "appearance": "solid black plain t-shirt, uniform continuous fabric, no logos, no seams, no stripes",
+    "negative_prompt": "vertical stripe, center stripe, white stripe, white band, zipper, necktie, clothing seam, color split, clothing artifact, texture artifact, logo, printed design, unrealistic shirt, duplicated fabric, warped clothing, diffusion artifact",
+    "avatarization": "background replacement, plain black shirt rendering, face anonymization, lighting shift, camera reframing",
     "note": "CPU avatarized motion-transfer fallback; not a raw dataset copy."
   },
   {
@@ -114,8 +120,9 @@
     "codec": "h264",
     "pix_fmt": "yuv420p",
     "background": "moroccan_room",
-    "appearance": "dark navy/black tailored business suit, white dress shirt, professional studio presenter style",
-    "avatarization": "background replacement, formal suit rendering, face anonymization, lighting shift, camera reframing",
+    "appearance": "solid black plain t-shirt, uniform continuous fabric, no logos, no seams, no stripes",
+    "negative_prompt": "vertical stripe, center stripe, white stripe, white band, zipper, necktie, clothing seam, color split, clothing artifact, texture artifact, logo, printed design, unrealistic shirt, duplicated fabric, warped clothing, diffusion artifact",
+    "avatarization": "background replacement, plain black shirt rendering, face anonymization, lighting shift, camera reframing",
     "note": "CPU avatarized motion-transfer fallback; not a raw dataset copy."
   },
   {
@@ -131,8 +138,9 @@
     "codec": "h264",
     "pix_fmt": "yuv420p",
     "background": "daylight_room",
-    "appearance": "dark navy/black tailored business suit, white dress shirt, professional studio presenter style",
-    "avatarization": "background replacement, formal suit rendering, face anonymization, lighting shift, camera reframing",
+    "appearance": "solid black plain t-shirt, uniform continuous fabric, no logos, no seams, no stripes",
+    "negative_prompt": "vertical stripe, center stripe, white stripe, white band, zipper, necktie, clothing seam, color split, clothing artifact, texture artifact, logo, printed design, unrealistic shirt, duplicated fabric, warped clothing, diffusion artifact",
+    "avatarization": "background replacement, plain black shirt rendering, face anonymization, lighting shift, camera reframing",
     "note": "CPU avatarized motion-transfer fallback; not a raw dataset copy."
   },
   {
@@ -148,8 +156,9 @@
     "codec": "h264",
     "pix_fmt": "yuv420p",
     "background": "news_studio",
-    "appearance": "dark navy/black tailored business suit, white dress shirt, professional studio presenter style",
-    "avatarization": "background replacement, formal suit rendering, face anonymization, lighting shift, camera reframing",
+    "appearance": "solid black plain t-shirt, uniform continuous fabric, no logos, no seams, no stripes",
+    "negative_prompt": "vertical stripe, center stripe, white stripe, white band, zipper, necktie, clothing seam, color split, clothing artifact, texture artifact, logo, printed design, unrealistic shirt, duplicated fabric, warped clothing, diffusion artifact",
+    "avatarization": "background replacement, plain black shirt rendering, face anonymization, lighting shift, camera reframing",
     "note": "CPU avatarized motion-transfer fallback; not a raw dataset copy."
   },
   {
@@ -165,8 +174,9 @@
     "codec": "h264",
     "pix_fmt": "yuv420p",
     "background": "home_indoor",
-    "appearance": "dark navy/black tailored business suit, white dress shirt, professional studio presenter style",
-    "avatarization": "background replacement, formal suit rendering, face anonymization, lighting shift, camera reframing",
+    "appearance": "solid black plain t-shirt, uniform continuous fabric, no logos, no seams, no stripes",
+    "negative_prompt": "vertical stripe, center stripe, white stripe, white band, zipper, necktie, clothing seam, color split, clothing artifact, texture artifact, logo, printed design, unrealistic shirt, duplicated fabric, warped clothing, diffusion artifact",
+    "avatarization": "background replacement, plain black shirt rendering, face anonymization, lighting shift, camera reframing",
     "note": "CPU avatarized motion-transfer fallback; not a raw dataset copy."
   }
 ]

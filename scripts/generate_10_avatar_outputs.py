@@ -39,94 +39,95 @@ from scripts.generate_photorealistic_avatar import (  # noqa: E402
 PROJECT_VIDEO_DIRS = [Path("outputs/videos/mosaic"), Path("outputs/videos")]
 DATASET_DIR = Path(".devcontainer/Dataset")
 OUTPUT_DIR = Path("avatar_video_generator/outputs")
+PLAIN_BLACK_TSHIRT_RGB = (12, 12, 12)
 
 AVATAR_PROFILES = [
     {
         "profile": "young adult male",
-        "suit": (20, 30, 54),
+        "shirt": PLAIN_BLACK_TSHIRT_RGB,
         "background": "studio",
-        "lighting": (1.06, 8),
+        "lighting": (1.07, 8),
         "scale": 1.04,
         "x_shift": -10,
         "skin_shift": (10, 0, -6),
     },
     {
         "profile": "young adult female",
-        "suit": (12, 18, 32),
+        "shirt": PLAIN_BLACK_TSHIRT_RGB,
         "background": "office",
-        "lighting": (1.03, 12),
+        "lighting": (1.07, 8),
         "scale": 1.08,
         "x_shift": 8,
         "skin_shift": (12, 4, 2),
     },
     {
         "profile": "middle-aged male",
-        "suit": (28, 32, 38),
+        "shirt": PLAIN_BLACK_TSHIRT_RGB,
         "background": "classroom",
-        "lighting": (0.98, 4),
+        "lighting": (1.07, 8),
         "scale": 1.12,
         "x_shift": 0,
         "skin_shift": (-8, -2, 8),
     },
     {
         "profile": "middle-aged female",
-        "suit": (18, 24, 42),
+        "shirt": PLAIN_BLACK_TSHIRT_RGB,
         "background": "warm_indoor",
-        "lighting": (1.08, 6),
+        "lighting": (1.07, 8),
         "scale": 1.02,
         "x_shift": 12,
         "skin_shift": (8, 4, 8),
     },
     {
         "profile": "elderly male",
-        "suit": (14, 18, 24),
+        "shirt": PLAIN_BLACK_TSHIRT_RGB,
         "background": "neutral_gradient",
-        "lighting": (0.96, 10),
+        "lighting": (1.07, 8),
         "scale": 1.10,
         "x_shift": -6,
         "skin_shift": (-14, -6, 10),
     },
     {
         "profile": "elderly female",
-        "suit": (24, 30, 48),
+        "shirt": PLAIN_BLACK_TSHIRT_RGB,
         "background": "soft_studio",
-        "lighting": (1.02, 14),
+        "lighting": (1.07, 8),
         "scale": 1.06,
         "x_shift": 4,
         "skin_shift": (14, 6, 4),
     },
     {
         "profile": "young Moroccan male",
-        "suit": (14, 26, 48),
+        "shirt": PLAIN_BLACK_TSHIRT_RGB,
         "background": "moroccan_room",
-        "lighting": (1.05, 5),
+        "lighting": (1.07, 8),
         "scale": 1.13,
         "x_shift": -12,
         "skin_shift": (18, 8, 0),
     },
     {
         "profile": "young Moroccan female",
-        "suit": (20, 22, 34),
+        "shirt": PLAIN_BLACK_TSHIRT_RGB,
         "background": "daylight_room",
-        "lighting": (1.10, 8),
+        "lighting": (1.07, 8),
         "scale": 1.07,
         "x_shift": 10,
         "skin_shift": (16, 10, 4),
     },
     {
         "profile": "professional studio presenter",
-        "suit": (10, 16, 30),
+        "shirt": PLAIN_BLACK_TSHIRT_RGB,
         "background": "news_studio",
-        "lighting": (1.12, 6),
+        "lighting": (1.07, 8),
         "scale": 1.16,
         "x_shift": 0,
         "skin_shift": (4, 0, -4),
     },
     {
         "profile": "casual everyday person",
-        "suit": (26, 32, 44),
+        "shirt": PLAIN_BLACK_TSHIRT_RGB,
         "background": "home_indoor",
-        "lighting": (1.00, 12),
+        "lighting": (1.07, 8),
         "scale": 1.00,
         "x_shift": -4,
         "skin_shift": (6, 4, 2),
@@ -165,8 +166,9 @@ def main() -> int:
                 "codec": validation.get("codec_name"),
                 "pix_fmt": validation.get("pix_fmt"),
                 "background": profile_cfg["background"],
-                "appearance": "dark navy/black tailored business suit, white dress shirt, professional studio presenter style",
-                "avatarization": "background replacement, formal suit rendering, face anonymization, lighting shift, camera reframing",
+                "appearance": "solid black plain t-shirt, uniform continuous fabric, no logos, no seams, no stripes",
+                "negative_prompt": "vertical stripe, center stripe, white stripe, white band, zipper, necktie, clothing seam, color split, clothing artifact, texture artifact, logo, printed design, unrealistic shirt, duplicated fabric, warped clothing, diffusion artifact",
+                "avatarization": "background replacement, plain black shirt rendering, face anonymization, lighting shift, camera reframing",
                 "note": "CPU avatarized motion-transfer fallback; not a raw dataset copy.",
             }
         )
@@ -185,7 +187,7 @@ def avatarize_frames(frames: list[np.ndarray], profile_cfg: dict, avatar_index: 
         h, w = frame.shape[:2]
         person_mask = _person_mask(frame)
         recolored = _apply_lighting(frame, profile_cfg["lighting"])
-        recolored = _apply_business_suit(recolored, person_mask, face_box, profile_cfg["suit"])
+        recolored = _apply_plain_black_tshirt(recolored, person_mask, face_box, profile_cfg["shirt"])
         recolored = _alter_face(recolored, person_mask, face_box, profile_cfg["skin_shift"], avatar_index)
         bg = _make_background(h, w, profile_cfg["background"], frame_index)
         alpha = cv2.GaussianBlur(person_mask.astype(np.float32) / 255.0, (7, 7), 0)[:, :, None]
@@ -241,58 +243,37 @@ def _haar_face_path() -> Path | None:
     return None
 
 
-def _apply_business_suit(
+def _apply_plain_black_tshirt(
     frame: np.ndarray,
     person_mask: np.ndarray,
     face_box: tuple[int, int, int, int],
-    suit_rgb: tuple[int, int, int],
+    shirt_rgb: tuple[int, int, int],
 ) -> np.ndarray:
     x, y, fw, fh = face_box
     h, w = frame.shape[:2]
     yy = np.arange(h)[:, None]
-    xx = np.arange(w)[None, :]
     shoulder_y = y + int(fh * 0.88)
     below_face = yy > shoulder_y
     hsv = cv2.cvtColor(frame, cv2.COLOR_RGB2HSV)
     skin_like = (hsv[:, :, 0] < 28) & (hsv[:, :, 1] > 35) & (hsv[:, :, 2] > 75)
-    body = (person_mask > 0) & below_face & (~skin_like)
-    if not np.any(body):
+    shirt_mask = (person_mask > 0) & below_face & (~skin_like)
+    if not np.any(shirt_mask):
         return frame
 
-    body_x = np.where(body)[1]
-    left = int(np.percentile(body_x, 8))
-    right = int(np.percentile(body_x, 92))
-    center = (left + right) // 2
-    width = max(right - left, 1)
+    mask_u8 = cv2.morphologyEx(shirt_mask.astype(np.uint8) * 255, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8))
+    alpha = cv2.GaussianBlur(mask_u8, (9, 9), 0).astype(np.float32) / 255.0
 
-    shirt_half = int(width * 0.17)
-    taper = np.clip((yy - shoulder_y) / max(h - shoulder_y, 1), 0, 1)
-    shirt_left = center - shirt_half - (taper * width * 0.07)
-    shirt_right = center + shirt_half + (taper * width * 0.07)
-    shirt = body & (xx >= shirt_left) & (xx <= shirt_right)
-    jacket = body & (~shirt)
+    luminance = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY).astype(np.float32)
+    folds = cv2.GaussianBlur(luminance, (0, 0), 5)
+    folds = (folds - folds.min()) / max(float(folds.max() - folds.min()), 1.0)
+    fold_shade = 0.70 + folds * 0.12
 
-    suit = np.zeros_like(frame, dtype=np.float32)
-    suit[:, :] = np.array(suit_rgb, dtype=np.float32)
-    shade = 0.58 + hsv[:, :, 2:3].astype(np.float32) / 520.0
-    suit = np.clip(suit * shade, 0, 255)
-
-    shirt_img = np.zeros_like(frame, dtype=np.float32)
-    shirt_img[:, :] = np.array((232, 234, 232), dtype=np.float32)
-    shirt_img *= 0.90 + hsv[:, :, 2:3].astype(np.float32) / 900.0
-
-    jacket_alpha = cv2.GaussianBlur(jacket.astype(np.uint8) * 255, (9, 9), 0).astype(np.float32) / 255.0
-    shirt_alpha = cv2.GaussianBlur(shirt.astype(np.uint8) * 255, (7, 7), 0).astype(np.float32) / 255.0
+    shirt = np.zeros_like(frame, dtype=np.float32)
+    shirt[:, :] = np.array(shirt_rgb, dtype=np.float32)
+    shirt = np.clip(shirt * fold_shade[:, :, None], 0, 24)
 
     out = frame.astype(np.float32)
-    out = out * (1 - jacket_alpha[:, :, None] * 0.90) + suit * (jacket_alpha[:, :, None] * 0.90)
-    out = out * (1 - shirt_alpha[:, :, None] * 0.88) + shirt_img * (shirt_alpha[:, :, None] * 0.88)
-
-    tie = body & (np.abs(xx - center) < max(3, width * 0.025)) & (yy > shoulder_y + int(fh * 0.18))
-    tie_alpha = cv2.GaussianBlur(tie.astype(np.uint8) * 255, (5, 5), 0).astype(np.float32) / 255.0
-    tie_img = np.zeros_like(frame, dtype=np.float32)
-    tie_img[:, :] = np.array((12, 16, 24), dtype=np.float32)
-    out = out * (1 - tie_alpha[:, :, None] * 0.68) + tie_img * (tie_alpha[:, :, None] * 0.68)
+    out = out * (1 - alpha[:, :, None] * 0.96) + shirt * (alpha[:, :, None] * 0.96)
     return np.clip(out, 0, 255).astype(np.uint8)
 
 
