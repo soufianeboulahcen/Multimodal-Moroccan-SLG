@@ -70,6 +70,7 @@ from avatar_video_generator.configs.config import (
     TemporalConfig,
 )
 from avatar_video_generator.pipelines.pose_extractor import find_pose_source
+from avatar_video_generator.utils.video_io import ascii_slug
 
 
 DEFAULT_VIDEO_SCAN_DIRS = [
@@ -485,7 +486,7 @@ def _existing_pose_source(sign_name: str) -> Path | None:
 
 
 def _safe_name(sign_name: str) -> str:
-    return sign_name.replace("/", "_").replace("\\", "_")[:80]
+    return ascii_slug(sign_name, fallback="avatar")
 
 
 def _find_reference_video(sign_name: str, dataset_dir: Path) -> Path | None:
@@ -608,7 +609,7 @@ def main() -> int:
         else:
             pose_source = args.pose_dir or args.skeleton_video
             sign_name = pose_source.stem.replace("_keypoints", "").replace("_skeleton", "") if pose_source else ""
-            safe_name = sign_name.replace("/", "_").replace("\\", "_")[:60]
+            safe_name = _safe_name(sign_name)
             output_path = args.output or (output_dir / f"{safe_name}_photorealistic.mp4")
             frames_dir = args.frames_dir
 

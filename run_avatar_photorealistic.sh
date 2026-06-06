@@ -101,6 +101,10 @@ check_deps() {
         echo "pip not found. Install Python packaging support before running avatar inference." >&2
         exit 1
     fi
+    if ! command -v ffmpeg &>/dev/null || ! command -v ffprobe &>/dev/null; then
+        echo "ffmpeg and ffprobe are required to export validated H.264/yuv420p MP4 files." >&2
+        exit 1
+    fi
     if ! python3 -c "import diffusers" 2>/dev/null; then
         warn "diffusers not installed. Installing requirements_avatar.txt..."
         pip install -r requirements_avatar.txt -q

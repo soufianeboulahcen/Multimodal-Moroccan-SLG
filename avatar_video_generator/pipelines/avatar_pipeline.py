@@ -28,8 +28,11 @@ from avatar_video_generator.pipelines.pose_extractor import PoseExtractor, find_
 from avatar_video_generator.rendering.diffusion_renderer import DiffusionRenderer
 from avatar_video_generator.rendering.temporal_smoother import TemporalSmoother
 from avatar_video_generator.utils.video_io import (
+    ascii_slug,
+    ensure_ascii_media_path,
     extract_reference_frames,
     make_comparison_video,
+    validate_video_file,
     write_frames,
     write_video,
 )
@@ -152,7 +155,7 @@ class AvatarPipeline:
             self.load_models()
 
         t_start = time.time()
-        out_path = Path(output_path)
+        out_path = ensure_ascii_media_path(output_path, default_stem="avatar_video")
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
         label = sign_name or Path(pose_source).stem
@@ -231,10 +234,10 @@ class AvatarPipeline:
             frames_path = Path(frames_dir) if frames_dir is not None else (
                 out_path.parent / f"{out_path.stem}{self.cfg.export.frames_path_suffix}"
             )
-            write_frames(final_frames, frames_path)
+            frames_path = write_frames(final_frames, frames_path)
             logger.info(f"  Avatar frames: {frames_path}")
 
-        write_video(
+        out_path = write_video(
             final_frames,
             out_path,
             fps=output_fps,
@@ -249,7 +252,7 @@ class AvatarPipeline:
             stem = out_path.stem + self.cfg.export.comparison_path_suffix
             comparison_path = out_path.parent / f"{stem}.mp4"
             try:
-                make_comparison_video(
+                comparison_path = make_comparison_video(
                     pose_numpy, smooth_frames, comparison_path,
                     fps=self.cfg.export.fps,
                 )
@@ -305,15 +308,23 @@ class AvatarPipeline:
 
         for i, sign in enumerate(signs):
             sign_name = sign.get("sign_name") or Path(sign["pose_source"]).stem
-            safe_name = sign_name.replace("/", "_").replace("\\", "_")[:60]
-            out_path = Path(sign.get("output_path") or (out_dir / f"{safe_name}_photorealistic.mp4"))
+            safe_name = ascii_slug(sign_name, fallback="avatar")
+            out_path = ensure_ascii_media_path(
+                sign.get("output_path") or (out_dir / f"{safe_name}_photorealistic.mp4"),
+                default_stem="avatar_video",
+            )
             frames_dir = sign.get("frames_dir")
 
             logger.info(f"\n[{i+1}/{n}] {sign_name}")
 
             if out_path.exists():
-                logger.info(f"  [SKIP] already exists: {out_path}")
-                continue
+                try:
+                    validate_video_file(out_path)
+                    logger.info(f"  [SKIP] valid output already exists: {out_path}")
+                    continue
+                except Exception as e:
+                    logger.warning(f"  Existing output is invalid; re-exporting: {e}")
+                    out_path.unlink(missing_ok=True)
 
             try:
                 result = self.run(
@@ -373,7 +384,7 @@ class AvatarPipeline:
                 "The reference video is needed to extract the signer's identity."
             )
 
-        safe_name = sign_name.replace("/", "_").replace("\\", "_")[:60]
+        safe_name = ascii_slug(sign_name, fallback="avatar")
         out_path = Path(output_dir) / f"{safe_name}_photorealistic.mp4"
 
         return self.run(

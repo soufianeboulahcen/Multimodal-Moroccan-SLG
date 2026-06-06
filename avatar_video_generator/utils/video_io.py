@@ -4,13 +4,47 @@ All functions operate on numpy arrays (H, W, 3) uint8 in RGB colour space.
 """
 from __future__ import annotations
 
+import hashlib
+import re
 import subprocess
+import unicodedata
 from pathlib import Path
 from typing import List, Optional, Tuple
 
 import cv2
 import numpy as np
 from PIL import Image
+
+
+ASCII_STEM_MAX_LEN = 80
+
+
+# ---------------------------------------------------------------------------
+# Path safety
+# ---------------------------------------------------------------------------
+
+def ascii_slug(value: str, fallback: str = "avatar", max_len: int = ASCII_STEM_MAX_LEN) -> str:
+    """Return a filesystem-safe ASCII slug.
+
+    Non-ASCII labels, including Arabic sign names, collapse to a deterministic
+    ``fallback_<hash>`` name. This keeps generated media portable across video
+    players, archives, and file shares that mishandle Unicode paths.
+    """
+    normalised = unicodedata.normalize("NFKD", value)
+    ascii_text = normalised.encode("ascii", "ignore").decode("ascii").lower()
+    slug = re.sub(r"[^a-z0-9]+", "_", ascii_text).strip("_")
+    digest = hashlib.sha1(value.encode("utf-8")).hexdigest()[:8]
+    if slug:
+        return slug[:max_len].strip("_")
+    return f"{fallback}_{digest}"
+
+
+def ensure_ascii_media_path(path: str | Path, default_stem: str = "avatar") -> Path:
+    """Return an equivalent path whose filename stem is simple ASCII."""
+    p = Path(path)
+    suffix = p.suffix.lower()
+    stem = ascii_slug(p.stem or default_stem, fallback=default_stem)
+    return p.with_name(f"{stem}{suffix}")
 
 
 # ---------------------------------------------------------------------------
@@ -134,7 +168,7 @@ def write_video(
 ) -> Path:
     """Encode a list of RGB frames to an H.264 MP4 via ffmpeg.
 
-    Falls back to imageio if ffmpeg is not on PATH.
+    ffmpeg is required so every MP4 is finalised as H.264/yuv420p.
 
     Args:
         frames: list of (H, W, 3) uint8 RGB arrays (all same size).
@@ -148,25 +182,41 @@ def write_video(
     Returns:
         Path to the written file.
     """
-    out = Path(output_path)
+    out = ensure_ascii_media_path(output_path, default_stem="avatar_video")
     out.parent.mkdir(parents=True, exist_ok=True)
 
     if not frames:
         raise ValueError("No frames to write.")
 
-    h, w = frames[0].shape[:2]
+    repaired = repair_frame_sequence(frames)
+    h, w = repaired[0].shape[:2]
 
-    # Try ffmpeg pipe (best quality + compatibility)
-    try:
-        _write_via_ffmpeg(frames, out, fps=fps, crf=crf,
-                          codec=codec, pixel_format=pixel_format, w=w, h=h)
-    except (FileNotFoundError, subprocess.CalledProcessError):
-        # Fallback: imageio
-        _write_via_imageio(frames, out, fps=fps)
+    # Always force broadly compatible MP4 output. If validation fails, re-export
+    # once from the repaired in-memory frames before surfacing the failure.
+    last_error: Exception | None = None
+    for attempt in range(2):
+        try:
+            _write_via_ffmpeg(
+                repaired,
+                out,
+                fps=fps,
+                crf=crf,
+                codec="libx264",
+                pixel_format="yuv420p",
+                w=w,
+                h=h,
+            )
+            validate_video_file(out, expected_min_frames=len(repaired))
+            break
+        except (FileNotFoundError, subprocess.CalledProcessError, IOError, ValueError) as e:
+            last_error = e
+            out.unlink(missing_ok=True)
+            if attempt == 1:
+                raise RuntimeError(f"Could not export a valid H.264/yuv420p MP4: {out}") from last_error
 
     if verbose:
         size_mb = out.stat().st_size / 1e6
-        print(f"  Saved: {out}  ({len(frames)} frames @ {fps:.0f} fps, {size_mb:.1f} MB)")
+        print(f"  Saved: {out}  ({len(repaired)} frames @ {fps:.0f} fps, {size_mb:.1f} MB)")
 
     return out
 
@@ -186,14 +236,135 @@ def write_frames(
     Returns:
         Path to the directory containing the generated frames.
     """
-    out = Path(output_dir)
+    out = ensure_ascii_media_path(output_dir, default_stem="avatar_frames").with_suffix("")
     out.mkdir(parents=True, exist_ok=True)
     if not frames:
         raise ValueError("No frames to write.")
 
-    for i, frame in enumerate(frames):
-        Image.fromarray(frame).save(out / pattern.format(i))
+    repaired = repair_frame_sequence(frames)
+    for i, frame in enumerate(repaired):
+        frame_path = out / pattern.format(i)
+        frame_path = ensure_ascii_media_path(frame_path, default_stem=f"avatar_{i:06d}")
+        suffix = frame_path.suffix.lower()
+        if suffix not in {".png", ".jpg", ".jpeg"}:
+            frame_path = frame_path.with_suffix(".png")
+        image = Image.fromarray(frame)
+        if frame_path.suffix.lower() in {".jpg", ".jpeg"}:
+            image.save(frame_path, format="JPEG", quality=95, optimize=False)
+        else:
+            image.save(frame_path, format="PNG", optimize=False)
+        validate_image_file(frame_path)
     return out
+
+
+def repair_frame_sequence(frames: List[np.ndarray]) -> List[np.ndarray]:
+    """Normalise generated frames and replace broken frames deterministically."""
+    if not frames:
+        raise ValueError("No frames to repair.")
+
+    target_h: int | None = None
+    target_w: int | None = None
+    previous: np.ndarray | None = None
+    repaired: List[np.ndarray] = []
+
+    for frame in frames:
+        fixed = _coerce_frame(frame)
+        if fixed is None:
+            if previous is not None:
+                fixed = previous.copy()
+            else:
+                fixed = np.zeros((512, 512, 3), dtype=np.uint8)
+
+        if target_h is None or target_w is None:
+            target_h, target_w = fixed.shape[:2]
+            target_h -= target_h % 2
+            target_w -= target_w % 2
+            target_h = max(target_h, 2)
+            target_w = max(target_w, 2)
+
+        if fixed.shape[:2] != (target_h, target_w):
+            fixed = cv2.resize(fixed, (target_w, target_h), interpolation=cv2.INTER_LANCZOS4)
+
+        fixed = fixed[:target_h, :target_w, :3].copy()
+        previous = fixed
+        repaired.append(fixed)
+
+    return repaired
+
+
+def validate_image_file(path: str | Path) -> None:
+    """Raise if an exported PNG/JPG cannot be opened and verified."""
+    p = Path(path)
+    if not p.exists() or p.stat().st_size == 0:
+        raise IOError(f"Invalid image output: {p}")
+    with Image.open(p) as img:
+        img.verify()
+    with Image.open(p) as img:
+        img.load()
+        if img.format not in {"PNG", "JPEG"}:
+            raise ValueError(f"Unsupported image format for {p}: {img.format}")
+        if img.width <= 0 or img.height <= 0:
+            raise ValueError(f"Invalid image dimensions for {p}: {img.size}")
+
+
+def validate_video_file(path: str | Path, expected_min_frames: int = 1) -> dict:
+    """Validate that an MP4 is readable and encoded as H.264/yuv420p."""
+    p = Path(path)
+    if not p.exists() or p.stat().st_size == 0:
+        raise IOError(f"Invalid video output: {p}")
+
+    info = _probe_video_with_ffprobe(p)
+    if info:
+        codec = info.get("codec_name")
+        pix_fmt = info.get("pix_fmt")
+        frames = int(float(info.get("nb_read_frames") or info.get("nb_frames") or 0))
+        if codec != "h264":
+            raise ValueError(f"Video is not H.264: {p} codec={codec}")
+        if pix_fmt != "yuv420p":
+            raise ValueError(f"Video is not yuv420p: {p} pix_fmt={pix_fmt}")
+        if frames and frames < expected_min_frames:
+            raise ValueError(f"Video frame count is invalid: {p} frames={frames}")
+
+    cap = cv2.VideoCapture(str(p))
+    if not cap.isOpened():
+        raise IOError(f"OpenCV cannot open video: {p}")
+    readable = 0
+    while readable < max(1, min(expected_min_frames, 3)):
+        ok, frame = cap.read()
+        if not ok or frame is None:
+            break
+        readable += 1
+    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    cap.release()
+    if readable == 0 or total <= 0:
+        raise ValueError(f"Video contains no readable frames: {p}")
+    return {"path": str(p), "frame_count": total, **info}
+
+
+def _coerce_frame(frame: object) -> np.ndarray | None:
+    if frame is None:
+        return None
+    arr = np.asarray(frame)
+    if arr.size == 0 or arr.ndim not in {2, 3}:
+        return None
+    if arr.ndim == 2:
+        arr = np.repeat(arr[:, :, None], 3, axis=2)
+    if arr.shape[2] == 1:
+        arr = np.repeat(arr, 3, axis=2)
+    elif arr.shape[2] == 4:
+        arr = arr[:, :, :3]
+    elif arr.shape[2] < 3:
+        return None
+    else:
+        arr = arr[:, :, :3]
+
+    if not np.isfinite(arr).all():
+        arr = np.nan_to_num(arr, nan=0.0, posinf=255.0, neginf=0.0)
+    if arr.dtype != np.uint8:
+        if arr.max(initial=0) <= 1.0:
+            arr = arr * 255.0
+        arr = np.clip(arr, 0, 255).astype(np.uint8)
+    return np.ascontiguousarray(arr)
 
 
 def _write_via_ffmpeg(
@@ -207,44 +378,68 @@ def _write_via_ffmpeg(
     h: int,
 ) -> None:
     """Write frames via ffmpeg stdin pipe."""
+    tmp = out.with_name(f".{out.stem}.tmp{out.suffix}")
     cmd = [
         "ffmpeg", "-y",
+        "-hide_banner",
+        "-loglevel", "error",
         "-f", "rawvideo",
         "-vcodec", "rawvideo",
         "-s", f"{w}x{h}",
         "-pix_fmt", "rgb24",
         "-r", str(fps),
         "-i", "pipe:0",
-        "-vcodec", codec,
+        "-an",
+        "-map_metadata", "-1",
+        "-metadata", "major_brand=mp42",
+        "-c:v", codec,
+        "-profile:v", "high",
+        "-level", "4.1",
         "-crf", str(crf),
         "-pix_fmt", pixel_format,
         "-movflags", "+faststart",
-        str(out),
+        str(tmp),
     ]
     proc = subprocess.Popen(cmd, stdin=subprocess.PIPE,
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    for frame in frames:
-        proc.stdin.write(frame.tobytes())
-    proc.stdin.close()
+                            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    assert proc.stdin is not None
+    try:
+        for frame in frames:
+            proc.stdin.write(frame.tobytes())
+        proc.stdin.close()
+    except BrokenPipeError:
+        proc.stdin.close()
+    stderr = proc.stderr.read() if proc.stderr is not None else b""
     proc.wait()
     if proc.returncode != 0:
+        tmp.unlink(missing_ok=True)
+        message = stderr.decode("utf-8", errors="replace").strip()
+        if message:
+            raise subprocess.CalledProcessError(proc.returncode, cmd, stderr=message)
         raise subprocess.CalledProcessError(proc.returncode, cmd)
+    tmp.replace(out)
 
 
-def _write_via_imageio(frames: List[np.ndarray], out: Path, fps: float) -> None:
-    """Write frames via imageio (fallback when ffmpeg is unavailable)."""
-    import imageio  # type: ignore
-    writer = imageio.get_writer(
-        str(out),
-        fps=fps,
-        codec="libx264",
-        quality=8,
-        pixelformat="yuv420p",
-        macro_block_size=None,
-    )
-    for frame in frames:
-        writer.append_data(frame)
-    writer.close()
+def _probe_video_with_ffprobe(path: Path) -> dict:
+    cmd = [
+        "ffprobe",
+        "-v", "error",
+        "-select_streams", "v:0",
+        "-count_frames",
+        "-show_entries", "stream=codec_name,pix_fmt,nb_frames,nb_read_frames",
+        "-of", "default=nokey=0:noprint_wrappers=1",
+        str(path),
+    ]
+    try:
+        proc = subprocess.run(cmd, check=True, capture_output=True, text=True)
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return {}
+    out: dict[str, str] = {}
+    for line in proc.stdout.splitlines():
+        if "=" in line:
+            key, value = line.split("=", 1)
+            out[key.strip()] = value.strip()
+    return out
 
 
 # ---------------------------------------------------------------------------
